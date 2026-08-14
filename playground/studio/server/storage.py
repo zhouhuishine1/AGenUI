@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .config import CUSTOM_DIR
+from .config import CUSTOM_DIR, SESSIONS_DIR
 
 
 # short_id is 6 hex chars; timestamp is YYYYmmdd_HHMMSS.
@@ -27,6 +27,7 @@ _ID_RE = re.compile(r"^[0-9a-f]{6}$")
 def ensure_dirs() -> None:
     """Create ~/.agenui/protocols/custom/ if missing."""
     CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _is_valid_id(protocol_id: str) -> bool:
@@ -103,6 +104,23 @@ def update_protocol(
     return record
 
 
+def update_conversation(protocol_id: str, conversation: list[dict[str, Any]]) -> bool:
+    """Store the complete local chat transcript for a generated session."""
+    file_path = _find_file(protocol_id)
+    if file_path is None:
+        return False
+    try:
+        record = json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    record["conversation"] = conversation
+    file_path.write_text(
+        json.dumps(record, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
 def load_protocol(protocol_id: str) -> dict[str, Any] | None:
     """Load the full protocol record (metadata + payloads), or None if absent."""
     file_path = _find_file(protocol_id)
@@ -146,3 +164,54 @@ def delete_protocol(protocol_id: str) -> bool:
         return True
     except OSError:
         return False
+
+
+def _session_path(session_id: str) -> Path | None:
+    return SESSIONS_DIR / f"{session_id}.json" if _is_valid_id(session_id) else None
+
+
+def _write_session(record: dict[str, Any]) -> dict[str, Any]:
+    path = _session_path(record["id"])
+    if path is None:
+        raise ValueError("invalid session id")
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return record
+
+
+def create_session(title: str) -> dict[str, Any]:
+    ensure_dirs()
+    now = datetime.now().isoformat(timespec="seconds")
+    record = {"id": uuid.uuid4().hex[:6], "title": title, "created_at": now,
+              "updated_at": now, "conversation": [], "draft": "", "protocol_id": None}
+    return _write_session(record)
+
+
+def load_session(session_id: str) -> dict[str, Any] | None:
+    path = _session_path(session_id)
+    if path is None:
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def list_sessions() -> list[dict[str, Any]]:
+    ensure_dirs()
+    sessions = []
+    for path in SESSIONS_DIR.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        sessions.append({key: record.get(key) for key in ("id", "title", "created_at", "updated_at", "protocol_id")})
+    return sorted(sessions, key=lambda item: item.get("updated_at") or "", reverse=True)
+
+
+def update_session(session_id: str, **changes: Any) -> dict[str, Any] | None:
+    record = load_session(session_id)
+    if record is None:
+        return None
+    record.update(changes)
+    record["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    return _write_session(record)

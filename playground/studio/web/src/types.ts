@@ -50,6 +50,20 @@ export interface ProtocolRecord {
   model: string;
   components: A2uiPayload;
   datamodel: A2uiPayload | null;
+  conversation?: RoundSnapshot[];
+}
+
+export interface SessionSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  protocol_id: string | null;
+}
+
+export interface SessionRecord extends SessionSummary {
+  conversation: RoundSnapshot[];
+  draft: string;
 }
 
 export interface PresetSummary {
@@ -123,4 +137,9 @@ export interface RoundSnapshot {
   thinking: string;
   done: DoneEvent | null;
   error: ErrorEvent | null;
+  images: ImageAttachment[];
+}
+
+export interface ImageAttachment {
+  data_url: string;
 }

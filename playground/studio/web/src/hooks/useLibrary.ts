@@ -1,12 +1,12 @@
 /** Loads the preset samples gallery and the user's generated protocols. */
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchPresets, fetchProtocols } from "@/api/client";
-import type { PresetSummary, ProtocolSummary } from "@/types";
+import { fetchPresets, fetchSessions } from "@/api/client";
+import type { PresetSummary, SessionSummary } from "@/types";
 
 export function useLibrary() {
   const [presets, setPresets] = useState<PresetSummary[]>([]);
-  const [protocols, setProtocols] = useState<ProtocolSummary[]>([]);
+  const [protocols, setProtocols] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -14,7 +14,7 @@ export function useLibrary() {
     try {
       const [presetList, protocolList] = await Promise.all([
         fetchPresets(),
-        fetchProtocols(),
+        fetchSessions(),
       ]);
       setPresets(presetList);
       setProtocols(protocolList);

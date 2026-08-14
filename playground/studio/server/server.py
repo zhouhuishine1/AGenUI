@@ -14,6 +14,7 @@ All routes are prefixed with /api so the static frontend can own the root path.
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ from .providers import build_provider
 
 
 app = FastAPI(title="AGenUI Studio", version="0.1.0")
+_preview_sequences: dict[str, list[dict[str, Any]]] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +63,12 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class ImageAttachment(BaseModel):
+    """A browser-local image encoded as a data URL for a vision-capable model."""
+
+    data_url: str
+
+
 class GenerateRequest(BaseModel):
     prompt: str
     mode: str = "component"  # "component" | "page"
@@ -73,6 +81,7 @@ class GenerateRequest(BaseModel):
     reasoning: bool = False
     # Multi-turn history: prior user/assistant messages for protocol refinement.
     history: list[ChatMessage] = []
+    images: list[ImageAttachment] = []
 
 
 class ProviderUpdate(BaseModel):
@@ -122,6 +131,26 @@ def _sse(event: GenerationEvent) -> str:
     """Serialize a GenerationEvent into an SSE frame (single-line data)."""
     payload = json.dumps(event.data, ensure_ascii=False)
     return f"event: {event.type}\ndata: {payload}\n\n"
+
+
+def _sse_error(message: str, code: str, *, status_code: int | None = None) -> StreamingResponse:
+    """Return request failures as SSE when the browser asked for a stream.
+
+    fetch-event-source requires ``text/event-stream`` even for an immediate
+    validation failure. Returning JSON here made it replace the useful server
+    message with a misleading content-type error.
+    """
+    def stream():
+        yield _sse(GenerationEvent(
+            type="error",
+            data={"message": message, "code": code, "status_code": status_code},
+        ))
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -236,6 +265,8 @@ def test_connection(req: TestConnectionRequest) -> dict[str, Any]:
 def generate(req: GenerateRequest):
     prompt = (req.prompt or "").strip()
     if not prompt:
+        if req.stream:
+            return _sse_error("prompt is required", "bad_request", status_code=400)
         return JSONResponse(
             status_code=400,
             content={"success": False, "message": "prompt is required", "code": "bad_request"},
@@ -243,25 +274,37 @@ def generate(req: GenerateRequest):
 
     mode = req.mode if req.mode in ("component", "page") else "component"
     history_msgs = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
-    provider = _resolve_provider(req.provider)
+    try:
+        provider = _resolve_provider(req.provider)
+    except Exception as exc:  # Provider client setup can fail before streaming starts.
+        message = f"Unable to initialize the selected provider: {exc}"
+        if req.stream:
+            return _sse_error(message, "provider_initialization")
+        return JSONResponse(status_code=500, content={"success": False, "message": message})
     if provider is None:
+        message = (
+            "No provider available. Set an api_key in ~/.agenui/config.json "
+            "or via POST /api/config."
+        )
+        if req.stream:
+            return _sse_error(message, "no_provider", status_code=400)
         return JSONResponse(
             status_code=400,
             content={
                 "success": False,
-                "message": (
-                    "No provider available. Set an api_key in ~/.agenui/config.json "
-                    "or via POST /api/config."
-                ),
+                "message": message,
                 "code": "no_provider",
             },
         )
 
     if not req.stream:
-        return generate_a2ui_sync(provider, prompt, mode, req.reasoning, history_msgs)
+        return generate_a2ui_sync(provider, prompt, mode, req.reasoning, history_msgs, [i.data_url for i in req.images])
 
     def event_stream():
-        for event in generate_a2ui_stream(provider, prompt, mode, req.reasoning, history_msgs):
+        for event in generate_a2ui_stream(
+            provider, prompt, mode, req.reasoning, history_msgs,
+            [image.data_url for image in req.images],
+        ):
             yield _sse(event)
 
     return StreamingResponse(
@@ -318,6 +361,97 @@ class ProtocolUpdateRequest(BaseModel):
     datamodel: dict[str, Any] | None = None
 
 
+class ConversationUpdateRequest(BaseModel):
+    conversation: list[dict[str, Any]]
+
+
+class SessionCreateRequest(BaseModel):
+    title: str
+
+
+class SessionUpdateRequest(BaseModel):
+    title: str | None = None
+    conversation: list[dict[str, Any]] | None = None
+    draft: str | None = None
+    protocol_id: str | None = None
+
+
+def _validate_session_title(title: str, session_id: str | None = None) -> str:
+    title = title.strip()
+    if not title:
+        raise ValueError("Session title cannot be empty")
+    if len(title) > 1024:
+        raise ValueError("Session title must be 1024 characters or fewer")
+    if any(item["id"] != session_id and item.get("title") == title for item in storage.list_sessions()):
+        raise ValueError("Session title must be unique")
+    return title
+
+
+@app.get("/api/sessions")
+def list_sessions() -> dict[str, Any]:
+    return {"sessions": storage.list_sessions()}
+
+
+@app.post("/api/sessions")
+def create_session(req: SessionCreateRequest):
+    try:
+        return storage.create_session(_validate_session_title(req.title))
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@app.get("/api/sessions/{session_id}")
+def get_session(session_id: str):
+    record = storage.load_session(session_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"error": "session not found"})
+    return record
+
+
+@app.put("/api/sessions/{session_id}")
+def update_session(session_id: str, req: SessionUpdateRequest):
+    try:
+        changes = req.model_dump(exclude_none=True)
+        if "title" in changes:
+            changes["title"] = _validate_session_title(changes["title"], session_id)
+        record = storage.update_session(session_id, **changes)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    if record is None:
+        return JSONResponse(status_code=404, content={"error": "session not found"})
+    return record
+
+
+@app.post("/api/preview")
+def create_preview(req: ProtocolUpdateRequest, request: Request):
+    """Publish an in-memory editable preview for the connected Playground.
+
+    Unlike a saved protocol this is deliberately ephemeral: pressing Preview
+    never overwrites a preset or a generated record.
+    """
+    sequence = render_sequence.build_render_sequence(req.components, req.datamodel)
+    if sequence is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "updateComponents.surfaceId is required for preview"},
+        )
+    preview_id = secrets.token_urlsafe(12)
+    _preview_sequences[preview_id] = sequence
+    cfg = load_config()
+    return {
+        "id": preview_id,
+        "url": f"http://{get_lan_ip()}:{request.url.port or cfg.port}/api/previews/{preview_id}/raw",
+    }
+
+
+@app.get("/api/previews/{preview_id}/raw")
+def get_preview_raw(preview_id: str):
+    sequence = _preview_sequences.get(preview_id)
+    if sequence is None:
+        return JSONResponse(status_code=404, content={"error": "preview expired"})
+    return sequence
+
+
 @app.put("/api/protocols/{protocol_id}")
 def update_protocol(protocol_id: str, req: ProtocolUpdateRequest):
     """Update an existing protocol's payloads in place (QR URL stays valid)."""
@@ -325,6 +459,13 @@ def update_protocol(protocol_id: str, req: ProtocolUpdateRequest):
     if record is None:
         return JSONResponse(status_code=404, content={"error": "protocol not found"})
     return {"ok": True, "id": record.get("id")}
+
+
+@app.put("/api/protocols/{protocol_id}/conversation")
+def update_protocol_conversation(protocol_id: str, req: ConversationUpdateRequest):
+    if not storage.update_conversation(protocol_id, req.conversation):
+        return JSONResponse(status_code=404, content={"error": "protocol not found"})
+    return {"ok": True, "id": protocol_id}
 
 
 # --------------------------------------------------------------------------- #

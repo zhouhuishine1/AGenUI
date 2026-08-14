@@ -29,7 +29,7 @@ export function parseStream(buffer: string): ParsedStream {
 
   // Collect and strip closed ```json ... ``` blocks.
   let thinking = buffer.replace(
-    /```json\s*\r?\n([\s\S]*?)\r?\n?\s*```/gi,
+    /```json\b[ \t]*(?:\r?\n)?([\s\S]*?)\r?\n?\s*```/gi,
     (_full, body: string) => {
       closedBlocks.push(body);
       return "";
@@ -38,10 +38,11 @@ export function parseStream(buffer: string): ParsedStream {
 
   // A trailing ```json without a closing fence is a block still streaming.
   let unclosed = "";
-  const unclosedIdx = thinking.toLowerCase().lastIndexOf("```json");
-  if (unclosedIdx !== -1) {
-    unclosed = thinking.slice(unclosedIdx + 7).replace(/^\s*\r?\n/, "");
-    thinking = thinking.slice(0, unclosedIdx);
+  const openFences = [...thinking.matchAll(/```json\b[ \t]*(?:\r?\n)?/gi)];
+  const openFence = openFences[openFences.length - 1];
+  if (openFence?.index != null) {
+    unclosed = thinking.slice(openFence.index + openFence[0].length);
+    thinking = thinking.slice(0, openFence.index);
   }
 
   const allBlocks = unclosed ? [...closedBlocks, unclosed] : closedBlocks;

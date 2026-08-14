@@ -12,6 +12,7 @@ import type {
   StageEvent,
   TokenEvent,
 } from "@/types";
+import type { ImageAttachment } from "@/types";
 
 export interface GenerateCallbacks {
   onStage: (stage: StageEvent) => void;
@@ -26,6 +27,8 @@ export interface ChatMessage {
   content: string;
 }
 
+export type { ImageAttachment } from "@/types";
+
 export async function startGeneration(
   prompt: string,
   mode: string,
@@ -34,14 +37,27 @@ export async function startGeneration(
   callbacks: GenerateCallbacks,
   signal: AbortSignal,
   history: ChatMessage[] = [],
+  images: ImageAttachment[] = [],
 ): Promise<void> {
   await fetchEventSource("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, mode, stream: true, provider, reasoning, history }),
+    body: JSON.stringify({ prompt, mode, stream: true, provider, reasoning, history, images }),
     signal,
     // Keep the stream alive even when the tab is backgrounded.
     openWhenHidden: true,
+    async onopen(response) {
+      if (response.ok && response.headers.get("content-type")?.includes("text/event-stream")) return;
+      const contentType = response.headers.get("content-type") || "unknown";
+      let message = `Generation request failed (${response.status})`;
+      try {
+        const body = await response.json() as { detail?: string; message?: string; error?: string };
+        message = body.detail || body.message || body.error || message;
+      } catch {
+        // A proxy may return plain text/HTML. Keep the status-focused message.
+      }
+      throw new Error(message + (contentType.includes("text/event-stream") ? "" : ` (${contentType})`));
+    },
     onmessage(ev) {
       let data: unknown;
       try {

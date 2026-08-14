@@ -11,6 +11,7 @@ const CODE_LABELS: Record<string, string> = {
   network: "Network error",
   server_error: "Provider server error",
   extraction_failed: "Could not extract A2UI protocol",
+  vision_unsupported: "Model does not support images",
   stream_error: "Stream interrupted",
   unknown: "Unknown error",
 };

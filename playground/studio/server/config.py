@@ -21,6 +21,7 @@ PROTOCOLS_DIR = CONFIG_DIR / "protocols"
 # Model-generated (custom) protocols and presets live in sub-directories.
 CUSTOM_DIR = PROTOCOLS_DIR / "custom"
 SAMPLES_DIR = PROTOCOLS_DIR / "presets"
+SESSIONS_DIR = CONFIG_DIR / "sessions"
 
 # Preset template for first-run config generation.
 # api_key left empty for user to fill.

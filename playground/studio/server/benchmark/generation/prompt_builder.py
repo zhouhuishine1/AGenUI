@@ -145,6 +145,13 @@ def _render_validator_contract(skill_dir: Path) -> str:
         f"{_code_values(validator.ALLOWED_TEXT_STYLE_KEYS)}",
         f"- Allowed icon names: {_code_values(validator.ALLOWED_ICON_NAMES)}",
         "",
+        "Hard validation rules (do not violate any of these):",
+        "- The component with id `root` must not set a solid `styles.background-color`; use `transparent` or omit it.",
+        "- Every `styles.padding` and `styles.margin` value must contain exactly four `px` values, for example `16px 24px 16px 24px`. Never use one-, two-, or three-value shorthand.",
+        "- Every `styles.border-radius` and `styles.border-width` value must be exactly one `px` value, for example `16px`.",
+        "- `styles.color`, `font-size`, `font-weight`, and all other text-only styles are allowed only on `Text` and `RichText`; never put them on `Icon`, `Button`, `Row`, or any other component.",
+        "- Before responding, check every component against these rules and output only payloads that pass the contract.",
+        "",
         "Component attribute enums:",
     ]
     for component in sorted(validator.COMPONENT_ENUMS):
@@ -359,15 +366,20 @@ def build_system_prompt(
                 content = fpath.read_text(encoding="utf-8")
                 parts.append(f"# Reference: {fname}\n\n{content}")
 
-    # 3. Optional placeholder images
+    # 3. Inject the executable validator contract for every generation mode.
+    # The Studio uses the full profile for text-only generation, so omitting
+    # this would let its model produce payloads that the same server rejects.
+    parts.append(_render_validator_contract(skill_dir))
+
+    # 4. Optional placeholder images
     if allow_placeholder_images:
         parts.append(PLACEHOLDER_IMAGE_INSTRUCTIONS)
 
-    # 4. Optional data-driven layout instructions
+    # 5. Optional data-driven layout instructions
     if data_file_content is not None:
         parts.append(DATA_FILE_INSTRUCTIONS)
 
-    # 5. Output format instructions (always last)
+    # 6. Output format instructions (always last)
     parts.append(OUTPUT_INSTRUCTIONS)
 
     return "\n\n---\n\n".join(parts)

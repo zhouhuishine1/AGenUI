@@ -233,6 +233,15 @@ def classify_error(exc: Exception) -> ProviderError:
             detail,
         )
 
+    lowered = detail.lower()
+    if "image_url" in lowered or "vision" in lowered or "multimodal" in lowered:
+        return ProviderError(
+            "The selected model does not support image input. Choose a vision-capable model and try again.",
+            "vision_unsupported",
+            status,
+            detail,
+        )
+
     # Fallback: keep the original message for diagnostics.
     return ProviderError(f"Provider error: {exc}", "unknown", status, detail)
 
@@ -260,11 +269,17 @@ class OpenAICompatProvider:
         system_prompt: str,
         user_prompt: str,
         history: list[dict] | None = None,
+        image_data_urls: list[str] | None = None,
     ) -> list[dict]:
         msgs: list[dict] = [{"role": "system", "content": system_prompt}]
         if history:
             msgs.extend(history)
-        msgs.append({"role": "user", "content": user_prompt})
+        if image_data_urls:
+            content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+            content.extend({"type": "image_url", "image_url": {"url": url}} for url in image_data_urls)
+            msgs.append({"role": "user", "content": content})
+        else:
+            msgs.append({"role": "user", "content": user_prompt})
         return msgs
 
     def chat(self, system_prompt: str, user_prompt: str, timeout: float = 120) -> str:
@@ -292,6 +307,7 @@ class OpenAICompatProvider:
         timeout: float = 120,
         enable_reasoning: bool | None = None,
         history: list[dict] | None = None,
+        image_data_urls: list[str] | None = None,
     ) -> Generator[StreamToken, None, None]:
         """Streaming completion. Yields incremental :class:`StreamToken` items.
 
@@ -321,7 +337,7 @@ class OpenAICompatProvider:
         try:
             stream = self._client.chat.completions.create(
                 model=self.model,
-                messages=self._messages(system_prompt, user_prompt, history),
+                messages=self._messages(system_prompt, user_prompt, history, image_data_urls),
                 max_tokens=self.max_tokens,
                 stream=True,
                 timeout=timeout,

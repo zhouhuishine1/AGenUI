@@ -12,6 +12,7 @@
 import { useCallback, useRef, useState } from "react";
 import { startGeneration } from "@/api/sse";
 import type { ChatMessage } from "@/api/sse";
+import type { ImageAttachment } from "@/api/sse";
 import { parseStream } from "@/lib/protocolParser";
 import type {
   DoneEvent,
@@ -87,7 +88,7 @@ export function useGeneration() {
   }, []);
 
   const generate = useCallback(
-    (prompt: string, mode: string, provider: string | null, reasoning: boolean, history: ChatMessage[] = []) => {
+    (prompt: string, mode: string, provider: string | null, reasoning: boolean, history: ChatMessage[] = [], images: ImageAttachment[] = []) => {
       // Reset for a new round.
       bufferRef.current = "";
       reasoningRef.current = "";
@@ -158,6 +159,7 @@ export function useGeneration() {
         },
         controller.signal,
         history,
+        images,
       ).catch(() => {
         // fetchEventSource rejects after onerror; state already handled there.
       });

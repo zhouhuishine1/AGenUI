@@ -5,8 +5,10 @@ import { ConfigModal } from "./ConfigModal";
 import { ModelSelector } from "./ModelSelector";
 import { SendButton } from "./SendButton";
 import { SettingsIcon, XIcon } from "@/components/icons";
+import { ImageIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
+import type { ImageAttachment } from "@/api/sse";
 
 interface InputBarProps {
   providers: Provider[];
@@ -15,9 +17,11 @@ interface InputBarProps {
    * the setup tip before we know if any api_key is configured). */
   providersLoaded: boolean;
   isGenerating: boolean;
-  onSend: (prompt: string, provider: string | null, reasoning: boolean) => void;
+  onSend: (prompt: string, provider: string | null, reasoning: boolean, images: ImageAttachment[]) => void;
   onStop: () => void;
   onConfigSaved: () => void;
+  value: string;
+  onValueChange: (value: string) => void;
 }
 
 export function InputBar({
@@ -28,13 +32,16 @@ export function InputBar({
   onSend,
   onStop,
   onConfigSaved,
+  value,
+  onValueChange,
 }: InputBarProps) {
-  const [text, setText] = useState("");
   const [provider, setProvider] = useState<string | null>(null);
   const [reasoning, setReasoning] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [setupTipDismissed, setSetupTipDismissed] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [images, setImages] = useState<ImageAttachment[]>([]);
 
   // Nudge the user to configure a model when no provider has an api_key yet.
   const showSetupTip = providersLoaded && providers.length === 0 && !setupTipDismissed;
@@ -46,7 +53,7 @@ export function InputBar({
     return () => window.clearTimeout(timer);
   }, [showSetupTip]);
 
-  const canSend = text.trim().length > 0 && !isGenerating;
+  const canSend = (value.trim().length > 0 || images.length > 0) && !isGenerating;
 
   const autoResize = () => {
     const el = textareaRef.current;
@@ -56,11 +63,26 @@ export function InputBar({
   };
 
   const handleSend = () => {
-    const prompt = text.trim();
-    if (!prompt || isGenerating) return;
-    onSend(prompt, provider, reasoning);
-    setText("");
+    const prompt = value.trim();
+    if ((!prompt && images.length === 0) || isGenerating) return;
+    onSend(prompt || "Describe the attached image and create the requested A2UI interface.", provider, reasoning, images);
+    onValueChange("");
+    setImages([]);
     requestAnimationFrame(autoResize);
+  };
+
+  const addFiles = (files: FileList | File[]) => {
+    const selected = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    selected.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        if (typeof dataUrl === "string") {
+          setImages((current) => [...current, { data_url: dataUrl }]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   return (
@@ -71,7 +93,7 @@ export function InputBar({
           <textarea
             ref={textareaRef}
             rows={1}
-            value={text}
+            value={value}
             disabled={isGenerating}
             placeholder={
               isGenerating
@@ -79,7 +101,7 @@ export function InputBar({
                 : "Describe the UI you want, e.g. generate a weather card showing city, temperature and condition"
             }
             onChange={(e) => {
-              setText(e.target.value);
+              onValueChange(e.target.value);
               autoResize();
             }}
             onKeyDown={(e) => {
@@ -88,13 +110,32 @@ export function InputBar({
                 handleSend();
               }
             }}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+              if (files.length > 0) {
+                e.preventDefault();
+                addFiles(files);
+              }
+            }}
             className="block w-full resize-none bg-transparent text-sm leading-5 text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-60"
           />
+          {images.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {images.map((image, index) => (
+                <div key={image.data_url} className="relative h-12 w-12 overflow-hidden rounded-md border border-slate-200 bg-white">
+                  <img src={image.data_url} alt={`Attachment ${index + 1}`} className="h-full w-full object-cover" />
+                  <button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Remove image" className="absolute right-0 top-0 rounded-bl bg-slate-800/70 p-0.5 text-white"><XIcon size={11} /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Bottom row: model selector + settings + reasoning (left), hint + send/stop (right). */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} title="Add image" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-600 disabled:opacity-60"><ImageIcon size={14} /></button>
             <ModelSelector
               providers={providers}
               active={active}

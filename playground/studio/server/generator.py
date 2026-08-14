@@ -60,6 +60,21 @@ The user now wants to refine that existing protocol. You MUST:
 User's refinement request:
 {user_request}"""
 
+VALIDATION_REPAIR_INSTRUCTION = """\
+Your previous A2UI response was malformed or failed the validator. Return a corrected replacement.
+
+You MUST preserve the intended UI and data, fix every error listed below, and
+return exactly two JSON code blocks with no other text. Validate the complete
+replacement against the system contract before responding.
+
+Parsing or validator errors:
+{validation_errors}
+
+Invalid response:
+```text
+{invalid_response}
+```"""
+
 
 @dataclass
 class GenerationEvent:
@@ -139,20 +154,45 @@ def _has_payload(result: dict[str, Any]) -> bool:
     return result.get("components") is not None and result.get("datamodel") is not None
 
 
+def _repair_invalid_payload(
+    provider: OpenAICompatProvider,
+    system_prompt: str,
+    result: dict[str, Any],
+    enable_reasoning: bool | None,
+) -> dict[str, Any]:
+    """Ask the model once to repair malformed or invalid protocol output."""
+    validation = result.get("validation") or {}
+    errors = validation.get("validation_errors") or [result.get("error") or "Protocol JSON could not be parsed"]
+    repair_prompt = VALIDATION_REPAIR_INSTRUCTION.format(
+        validation_errors="\n".join(f"- {error}" for error in errors),
+        invalid_response=result["raw"],
+    )
+    repaired_text = "".join(
+        token.text
+        for token in provider.chat_stream(
+            system_prompt,
+            repair_prompt,
+            enable_reasoning=enable_reasoning,
+        )
+        if token.kind == "content"
+    )
+    return _attempt(repaired_text)
+
+
 def generate_a2ui_stream(
     provider: OpenAICompatProvider,
     user_prompt: str,
     mode: str = "component",
     enable_reasoning: bool | None = None,
     history: list[dict] | None = None,
+    image_data_urls: list[str] | None = None,
 ) -> Generator[GenerationEvent, None, None]:
     """Generate an A2UI protocol, yielding progress events as they happen.
 
     Tokens are streamed to the caller as the model produces them. After the
     stream completes, the response is extracted and validated. A parseable
-    result is always saved and returned (with its validation report); only a
-    total extraction failure yields an ``error`` event. No automatic retry is
-    performed.
+    result is saved only after validation passes. A parseable but invalid
+    response receives one validator-error-driven repair attempt first.
 
     ``enable_reasoning`` is forwarded to the provider to force the model's
     thinking switch on/off (``None`` keeps the model default).
@@ -180,7 +220,7 @@ def generate_a2ui_stream(
         full_text = ""
         for tok in provider.chat_stream(
             system_prompt, user_message, enable_reasoning=enable_reasoning,
-            history=history,
+            history=history, image_data_urls=image_data_urls,
         ):
             if tok.kind == "reasoning":
                 # Chain-of-thought: display-only, does not enter the payload.
@@ -192,6 +232,13 @@ def generate_a2ui_stream(
         yield _stage("extracting")
         yield _stage("validating")
         result = _attempt(full_text)
+
+        if not _has_payload(result):
+            repaired = _repair_invalid_payload(
+                provider, system_prompt, result, enable_reasoning,
+            )
+            if _has_payload(repaired):
+                result = repaired
 
         if not _has_payload(result):
             yield GenerationEvent(
@@ -207,6 +254,27 @@ def generate_a2ui_stream(
             )
             return
 
+        validation = result.get("validation") or {}
+        if not validation.get("validation_passed"):
+            repaired = _repair_invalid_payload(
+                provider, system_prompt, result, enable_reasoning,
+            )
+            if _has_payload(repaired):
+                result = repaired
+                validation = result.get("validation") or {}
+
+        if not validation.get("validation_passed"):
+            yield GenerationEvent(
+                type="error",
+                data={
+                    "message": "Generated A2UI did not pass validation after automatic repair.",
+                    "code": "validation_failed",
+                    "detail": "\n".join(validation.get("validation_errors", [])),
+                    "raw_response": result.get("raw", ""),
+                },
+            )
+            return
+
         yield _stage("saving")
         record = storage.save_protocol(
             prompt=user_prompt,
@@ -217,7 +285,6 @@ def generate_a2ui_stream(
             datamodel_dict=result["datamodel"],
         )
 
-        validation = result.get("validation") or {}
         yield GenerationEvent(
             type="done",
             data={
@@ -260,6 +327,7 @@ def generate_a2ui_sync(
     mode: str = "component",
     enable_reasoning: bool | None = None,
     history: list[dict] | None = None,
+    image_data_urls: list[str] | None = None,
 ) -> dict[str, Any]:
     """Non-streaming wrapper (for curl / testing). Returns the final event data."""
     final: dict[str, Any] = {
@@ -267,7 +335,9 @@ def generate_a2ui_sync(
         "message": "Generation produced no result",
         "code": "internal",
     }
-    for event in generate_a2ui_stream(provider, user_prompt, mode, enable_reasoning, history):
+    for event in generate_a2ui_stream(
+        provider, user_prompt, mode, enable_reasoning, history, image_data_urls,
+    ):
         if event.type in ("done", "error"):
             final = event.data
     return final

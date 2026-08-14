@@ -23,7 +23,11 @@ interface ProtocolPanelProps {
   /** rendering.png URL for the selected preset, or null. */
   renderingUrl: string | null;
   qrUrl: string | null;
+  onPreview: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
   onSave: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
+  editableTitle: boolean;
+  onTitleChange: (title: string) => Promise<void>;
+  onTitleError: (message: string) => void;
 }
 
 export function ProtocolPanel({
@@ -37,11 +41,31 @@ export function ProtocolPanel({
   presetId,
   renderingUrl,
   qrUrl,
+  onPreview,
   onSave,
+  editableTitle,
+  onTitleChange,
+  onTitleError,
 }: ProtocolPanelProps) {
   const [tab, setTab] = useState<Tab>("components");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState(title);
+
+  useEffect(() => setTitleValue(title), [title]);
+  const saveTitle = async () => {
+    try {
+      await onTitleChange(titleValue);
+      setEditingTitle(false);
+    } catch (err) {
+      setSaveState("error");
+      const message = err instanceof Error ? err.message : "Title save failed";
+      setSaveError(message);
+      onTitleError(message);
+      setTitleValue(title);
+    }
+  };
 
   // Reset save feedback whenever the loaded content changes.
   useEffect(() => {
@@ -71,6 +95,22 @@ export function ProtocolPanel({
     }
   };
 
+  const handlePreview = async () => {
+    try {
+      const components = JSON.parse(componentsText || "{}") as A2uiPayload;
+      const datamodel = datamodelText.trim()
+        ? JSON.parse(datamodelText) as A2uiPayload
+        : null;
+      setSaveState("saving");
+      setSaveError(null);
+      await onPreview(components, datamodel);
+      setSaveState("saved");
+    } catch (err) {
+      setSaveState("error");
+      setSaveError(err instanceof Error ? err.message : "Preview failed");
+    }
+  };
+
   const hasContent = componentsText.trim().length > 0 || datamodelText.trim().length > 0;
 
   return (
@@ -78,9 +118,11 @@ export function ProtocolPanel({
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
         <BoxIcon size={15} className="text-brand-500" />
-        <span className="truncate text-xs font-semibold text-slate-700" title={title}>
-          {title || "Protocol"}
-        </span>
+        {editableTitle && editingTitle ? (
+          <input autoFocus value={titleValue} maxLength={1024} onChange={(event) => setTitleValue(event.target.value)} onBlur={() => void saveTitle()} onKeyDown={(event) => { if (event.key === "Enter") void saveTitle(); if (event.key === "Escape") { setTitleValue(title); setEditingTitle(false); } }} aria-label="Session title" className="min-w-0 flex-1 rounded border border-brand-300 px-1 text-xs font-semibold text-slate-700 outline-none" />
+        ) : (
+          <button type="button" onClick={() => editableTitle && setEditingTitle(true)} className="truncate text-left text-xs font-semibold text-slate-700" title={editableTitle ? "Click to rename session" : title}>{title || "Protocol"}</button>
+        )}
         {streaming && (
           <span className="ml-auto flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
@@ -90,7 +132,13 @@ export function ProtocolPanel({
       </div>
 
       {/* Preview & Scan strip: rendering (presets) + QR code. */}
-      <PreviewScanStrip presetId={presetId} renderingUrl={renderingUrl} qrUrl={qrUrl} />
+      <PreviewScanStrip
+        presetId={presetId}
+        renderingUrl={renderingUrl}
+        qrUrl={qrUrl}
+        componentsText={componentsText}
+        datamodelText={datamodelText}
+      />
 
       {hasContent ? (
         <>
@@ -111,6 +159,15 @@ export function ProtocolPanel({
                 {t === "components" ? "updateComponents" : "updateDataModel"}
               </button>
             ))}
+            {presetId && !streaming && (
+              <button
+                type="button"
+                onClick={() => void handlePreview()}
+                className="ml-auto rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-600 transition hover:bg-brand-50"
+              >
+                Preview
+              </button>
+            )}
           </div>
 
           {/* Editor */}

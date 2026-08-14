@@ -27,6 +27,7 @@ interface RoundView {
   error: ErrorEvent | null;
   live: boolean;
   status: GenerationStatus;
+  images: RoundSnapshot["images"];
 }
 
 function AssistantCard({ round }: { round: RoundView }) {
@@ -84,6 +85,13 @@ function RoundBlock({ round }: { round: RoundView }) {
       <div className="flex justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-tr-sm bg-brand-500 px-3.5 py-2 text-sm leading-6 text-white shadow-sm">
           {round.prompt}
+          {round.images.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {round.images.map((image, index) => (
+                <img key={image.data_url} src={image.data_url} alt={`Attached image ${index + 1}`} className="max-h-48 max-w-full rounded-lg border border-white/30 object-contain" />
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <AssistantCard round={round} />
@@ -101,6 +109,7 @@ export interface LiveRound {
   startedAt: number | null;
   done: DoneEvent | null;
   error: ErrorEvent | null;
+  images: RoundSnapshot["images"];
 }
 
 interface ConversationPanelProps {
@@ -153,6 +162,7 @@ export function ConversationPanel({ history, live }: ConversationPanelProps) {
                 error: snap.error,
                 live: false,
                 status: snap.error ? "error" : snap.done ? "done" : "idle",
+                images: snap.images ?? [],
               }}
             />
           ))}
@@ -171,6 +181,7 @@ export function ConversationPanel({ history, live }: ConversationPanelProps) {
                 error: live.error,
                 live: true,
                 status: live.status,
+                images: live.images,
               }}
             />
           )}

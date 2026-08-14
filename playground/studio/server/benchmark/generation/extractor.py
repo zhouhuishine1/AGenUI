@@ -14,9 +14,10 @@ def extract_json_blocks(text: str) -> tuple[str | None, str | None]:
     if not text:
         return None, None
 
-    # Strategy 1: find ```json ... ``` blocks
-    pattern = r"```json\s*\n(.*?)```"
-    matches = re.findall(pattern, text, re.DOTALL)
+    # Strategy 1: find ```json ... ``` blocks. Some OpenAI-compatible models
+    # put the opening ``{`` on the same line as the language marker.
+    pattern = r"```json\b[ \t]*(?:\r?\n)?(.*?)\r?\n?\s*```"
+    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
 
     if len(matches) >= 2:
         return matches[0].strip(), matches[1].strip()

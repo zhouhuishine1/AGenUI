@@ -9,17 +9,17 @@ import {
   SearchIcon,
 } from "@/components/icons";
 import { cn, formatTime } from "@/lib/utils";
-import type { PresetSummary, ProtocolSummary } from "@/types";
+import type { PresetSummary, SessionSummary } from "@/types";
 
 export type Selection =
   | { kind: "preset"; id: string }
-  | { kind: "protocol"; id: string }
+  | { kind: "session"; id: string }
   | { kind: "generation" }
   | null;
 
 interface PresetSidebarProps {
   presets: PresetSummary[];
-  protocols: ProtocolSummary[];
+  protocols: SessionSummary[];
   loading: boolean;
   selection: Selection;
   /** The in-flight generation (null when idle). Shown at the top of "My
@@ -88,7 +88,7 @@ export function PresetSidebar({
   const filteredProtocols = useMemo(
     () =>
       q
-        ? protocols.filter((p) => p.prompt_summary.toLowerCase().includes(q))
+        ? protocols.filter((p) => p.title.toLowerCase().includes(q))
         : protocols,
     [protocols, q],
   );
@@ -136,7 +136,7 @@ export function PresetSidebar({
         {/* My generations */}
         <GroupHeader
           icon={<ClockIcon size={12} />}
-          label="My Generations"
+          label="My Sessions"
           count={filteredProtocols.length + (liveGeneration ? 1 : 0)}
           open={protocolsOpen}
           onToggle={() => setProtocolsOpen((o) => !o)}
@@ -145,7 +145,7 @@ export function PresetSidebar({
           <div className="mb-2 space-y-0.5">
             {filteredProtocols.length === 0 && !liveGeneration && (
               <p className="px-2 py-1 text-[11px] text-slate-400">
-                Generated protocols will appear here
+                Custom sessions will appear here
               </p>
             )}
             {liveGeneration && (
@@ -173,13 +173,13 @@ export function PresetSidebar({
               </button>
             )}
             {filteredProtocols.map((p) => {
-              const active = selection?.kind === "protocol" && selection.id === p.id;
+              const active = selection?.kind === "session" && selection.id === p.id;
               return (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => onSelectProtocol(p.id)}
-                  title={p.prompt_summary}
+                  title={p.title}
                   className={cn(
                     "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition",
                     active ? "bg-brand-50" : "hover:bg-slate-100",
@@ -191,10 +191,10 @@ export function PresetSidebar({
                       active ? "font-medium text-brand-600" : "text-slate-600",
                     )}
                   >
-                    {p.prompt_summary || "(no prompt)"}
+                    {p.title}
                   </span>
                   <span className="text-[10px] text-slate-400">
-                    {p.provider}/{p.model} · {formatTime(p.created_at)}
+                    {formatTime(p.updated_at)}
                   </span>
                 </button>
               );
