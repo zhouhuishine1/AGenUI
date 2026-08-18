@@ -47,6 +47,25 @@ function nativeStyle(value: unknown): CSSProperties {
   return result as CSSProperties;
 }
 
+export function resolveImageSource(value: unknown, resolveDynamicValue: (value: never) => unknown): string {
+  if (value && typeof value === "object") {
+    if ("literalString" in value && typeof value.literalString === "string") return value.literalString;
+    if ("path" in value) return String(resolveDynamicValue(value as never) ?? "");
+  }
+  return typeof value === "string" ? value : "";
+}
+
+export function imageObjectFit(value: unknown): CSSProperties["objectFit"] {
+  switch (value) {
+    case "contain": return "contain";
+    case "cover": return "cover";
+    case "none": return "none";
+    case "scaleDown": return "scale-down";
+    case "fill":
+    default: return "fill";
+  }
+}
+
 function align(value: unknown) {
   return value === "center" ? "center" : value === "trailing" || value === "end" ? "flex-end" : value === "start" || value === "leading" ? "flex-start" : "stretch";
 }
@@ -98,7 +117,7 @@ function NativeComponent({ context, buildChild }: { context: ComponentContext; b
     return icon ? <svg aria-label={name} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0, color: style.color, ...style }}>{icon}</svg>
       : <span aria-label={name} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}>{name}</span>;
   }
-  if (type === "Image") return <img src={String(text(props.url ?? props.src) ?? "")} alt={String(props.description ?? "")} style={{ display: "block", objectFit: String(props.fit ?? "cover") as CSSProperties["objectFit"], ...style }} />;
+  if (type === "Image") return <img src={resolveImageSource(props.url ?? props.src, context.dataContext.resolveDynamicValue.bind(context.dataContext))} alt={String(text(props.description) ?? "")} style={{ display: "block", objectFit: imageObjectFit(props.fit), ...style }} />;
   if (type === "Divider") return <div style={{ width: "100%", height: 1, backgroundColor: "#d7e2ea", ...style }} />;
   if (type === "Button") return <button type="button" onClick={() => void context.dispatchAction(props.action)} style={{ cursor: "pointer", border: "none", ...style }}>{child ? buildChild(child) : String(text(props.label) ?? "")}</button>;
   if (type === "Card") return <section style={{ display: "block", overflow: "hidden", ...style }}>{child ? buildChild(child) : renderedChildren()}</section>;

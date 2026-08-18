@@ -78,7 +78,10 @@ public class ImageComponent extends A2UIComponent {
         // Background, border-radius, and border are applied uniformly by StyleHelper through the
         // base class — this component owns only the image content (url, fit, scale type).
         imageView = new ImageView(context);
-        imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        // A2UI's default Image fit is fill. Crop to the content bounds so a cover image never
+        // draws into the component padding or outside a rounded outline.
+        imageView.setScaleType(ImageView.ScaleType.FIT_XY);
+        imageView.setCropToPadding(true);
 
         if (!properties.isEmpty()) {
             AGenUILogger.d(TAG, "[ImageComponent] onCreateView - applying properties immediately");
@@ -305,7 +308,7 @@ public class ImageComponent extends A2UIComponent {
      * Parse scale mode.
      * A2UI v0.9 protocol values: contain, cover, fill, none, scaleDown
      */
-    private ImageView.ScaleType parseFit(String fit) {
+    static ImageView.ScaleType parseFit(String fit) {
         switch (fit.toLowerCase()) {
             case "contain":
                 return ImageView.ScaleType.FIT_CENTER;
@@ -314,13 +317,12 @@ public class ImageComponent extends A2UIComponent {
             case "fill":
                 return ImageView.ScaleType.FIT_XY;
             case "none":
-                // none maps to fill: stretch to fill container
-                return ImageView.ScaleType.FIT_XY;
+                return ImageView.ScaleType.CENTER;
             case "scaleDown":
                 // scaleDown is similar to contain but does not enlarge the image
                 return ImageView.ScaleType.CENTER_INSIDE;
             default:
-                return ImageView.ScaleType.FIT_CENTER;
+                return ImageView.ScaleType.FIT_XY;
         }
     }
 

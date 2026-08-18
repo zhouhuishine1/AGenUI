@@ -14,7 +14,8 @@ ImageComponent::ImageComponent(const std::string& id, const nlohmann::json& prop
     m_nodeHandle = g_nodeAPI->createNode(ARKUI_NODE_IMAGE);
 
     A2UIImageNode node(m_nodeHandle);
-    node.setObjectFitCover();
+    // A2UI's Image.fit default is fill.
+    node.setObjectFitFill();
     node.setTransformCenterPercent(0.5f, 0.5f);
 
     if (!properties.is_null() && properties.is_object()) {
@@ -373,11 +374,9 @@ int32_t ImageComponent::mapObjectFit(const std::string& fit) {
     } else if (fit == "fill") {
         return ARKUI_OBJECT_FIT_FILL;
     } else if (fit == "none") {
-        // none maps to fill: stretch to fill container
-        return ARKUI_OBJECT_FIT_FILL;
+        return ARKUI_OBJECT_FIT_NONE;
     }
-    // Default matches Android: FIT_CENTER (contain)
-    return ARKUI_OBJECT_FIT_CONTAIN;
+    return ARKUI_OBJECT_FIT_FILL;
 }
 
 

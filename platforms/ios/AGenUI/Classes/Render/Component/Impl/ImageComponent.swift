@@ -58,7 +58,7 @@ class ImageComponent: Component {
     override func createView(){
         let imageView = ObservedImageView()
         imageView.backgroundColor = .clear
-        imageView.contentMode = .scaleAspectFit
+        imageView.contentMode = .scaleToFill
         imageView.clipsToBounds = true
         imageView.image = nil
         imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -116,7 +116,7 @@ class ImageComponent: Component {
         var yogaHeight: Float = 0
         
         if let urlValue = properties["url"] {
-            let url = urlValue as? String ?? ""
+            let url = extractStringValue(urlValue)
             urlChanged = (url != currentUrl)
             currentUrl = url
         }
@@ -124,6 +124,7 @@ class ImageComponent: Component {
         // Update scale mode (A2UI v0.9 protocol: fit)
         if let fit = properties["fit"] as? String {
             imageView?.contentMode = parseFit(fit)
+            imageView?.usesScaleDown = fit.lowercased() == "scaledown"
         }
 
         // Apply CSS padding to the inner imageView.
@@ -184,7 +185,7 @@ class ImageComponent: Component {
     }
     
     /// Parse scale mode
-    /// A2UI v0.9 protocol values: fill, contain, cover, none, scaleDown, 100%, adapt
+    /// A2UI v0.9 protocol values: fill, contain, cover, none, scaleDown
     ///
     /// CSS object-fit standard:
     ///   none       → no scaling, original size, overflow clipped
@@ -207,16 +208,27 @@ class ImageComponent: Component {
         case "cover":
             return .scaleAspectFill
         case "none":
-            // none maps to fill: stretch to fill container, may distort
-            return .scaleToFill
+            return .center
         case "scaleDown":
             // CSS object-fit: scaleDown — shrink to fit if larger, keep original if smaller
             return .scaleAspectFit
         case "adapt":
             return .scaleAspectFit
         default:
-            return .scaleAspectFit
+            return .scaleToFill
         }
+    }
+
+    private func extractStringValue(_ value: Any) -> String {
+        if let value = value as? [String: Any] {
+            if let literalString = value["literalString"] as? String {
+                return literalString
+            }
+            if value["path"] != nil {
+                return ""
+            }
+        }
+        return value as? String ?? ""
     }
     
     // MARK: - Private Methods
@@ -303,6 +315,21 @@ class ImageComponent: Component {
     class ObservedImageView: UIImageView {
         private var pendingAnimation: Bool = false
         private var isTransitioning: Bool = false
+        var usesScaleDown = false {
+            didSet { setNeedsDisplay() }
+        }
+
+        override func draw(_ rect: CGRect) {
+            guard usesScaleDown, let image else {
+                super.draw(rect)
+                return
+            }
+
+            let scale = min(1, min(bounds.width / image.size.width, bounds.height / image.size.height))
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let origin = CGPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2)
+            image.draw(in: CGRect(origin: origin, size: size))
+        }
         
         override var frame: CGRect {
             didSet {
