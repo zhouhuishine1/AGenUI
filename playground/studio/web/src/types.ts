@@ -123,6 +123,7 @@ export interface ErrorEvent {
   status_code?: number | null;
   detail?: string | null;
   raw_response?: string;
+  raw_responses?: Array<{ label: string; response: string }>;
 }
 
 /** Overall generation lifecycle state. */

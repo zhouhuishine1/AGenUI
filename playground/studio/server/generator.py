@@ -36,6 +36,7 @@ from .providers import OpenAICompatProvider, ProviderError
 
 # Repo root / skills / a2ui-generation (shared read-only with the benchmark).
 SKILL_DIR = Path(__file__).resolve().parents[3] / "skills" / "a2ui-generation"
+TRUNCATION_RETRY_MAX_TOKENS = 16_384
 
 
 # Instruction wrapped around the user message on refinement turns (i.e. when a
@@ -159,7 +160,7 @@ def _repair_invalid_payload(
     system_prompt: str,
     result: dict[str, Any],
     enable_reasoning: bool | None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str | None]:
     """Ask the model once to repair malformed or invalid protocol output."""
     validation = result.get("validation") or {}
     errors = validation.get("validation_errors") or [result.get("error") or "Protocol JSON could not be parsed"]
@@ -167,16 +168,37 @@ def _repair_invalid_payload(
         validation_errors="\n".join(f"- {error}" for error in errors),
         invalid_response=result["raw"],
     )
-    repaired_text = "".join(
-        token.text
-        for token in provider.chat_stream(
-            system_prompt,
-            repair_prompt,
-            enable_reasoning=enable_reasoning,
-        )
-        if token.kind == "content"
+    repaired_text, finish_reason = _collect_response(
+        provider,
+        system_prompt,
+        repair_prompt,
+        enable_reasoning=enable_reasoning,
     )
-    return _attempt(repaired_text)
+    return _attempt(repaired_text), finish_reason
+
+
+def _collect_response(
+    provider: OpenAICompatProvider,
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    enable_reasoning: bool | None,
+    max_tokens: int | None = None,
+) -> tuple[str, str | None]:
+    """Collect a non-user-visible completion and its finish reason."""
+    content: list[str] = []
+    finish_reason: str | None = None
+    for token in provider.chat_stream(
+        system_prompt,
+        user_prompt,
+        enable_reasoning=enable_reasoning,
+        max_tokens=max_tokens,
+    ):
+        if token.kind == "content":
+            content.append(token.text)
+        elif token.kind == "finish":
+            finish_reason = token.text
+    return "".join(content), finish_reason
 
 
 def generate_a2ui_stream(
@@ -218,6 +240,7 @@ def generate_a2ui_stream(
 
         yield _stage("calling_model", model=provider.model)
         full_text = ""
+        finish_reason: str | None = None
         for tok in provider.chat_stream(
             system_prompt, user_message, enable_reasoning=enable_reasoning,
             history=history, image_data_urls=image_data_urls,
@@ -225,18 +248,37 @@ def generate_a2ui_stream(
             if tok.kind == "reasoning":
                 # Chain-of-thought: display-only, does not enter the payload.
                 yield GenerationEvent(type="reasoning", data={"content": tok.text})
-            else:
+            elif tok.kind == "content":
                 full_text += tok.text
                 yield GenerationEvent(type="token", data={"content": tok.text})
+            elif tok.kind == "finish":
+                finish_reason = tok.text
 
         yield _stage("extracting")
         yield _stage("validating")
         result = _attempt(full_text)
+        raw_responses = [{"label": "Initial response", "response": full_text}]
+
+        if not _has_payload(result) and finish_reason == "length":
+            retry_text, retry_finish_reason = _collect_response(
+                provider,
+                system_prompt,
+                user_message,
+                enable_reasoning=enable_reasoning,
+                max_tokens=TRUNCATION_RETRY_MAX_TOKENS,
+            )
+            raw_responses.append({
+                "label": f"Retry with {TRUNCATION_RETRY_MAX_TOKENS} max tokens",
+                "response": retry_text,
+            })
+            result = _attempt(retry_text)
+            finish_reason = retry_finish_reason
 
         if not _has_payload(result):
-            repaired = _repair_invalid_payload(
+            repaired, _ = _repair_invalid_payload(
                 provider, system_prompt, result, enable_reasoning,
             )
+            raw_responses.append({"label": "Automatic repair", "response": repaired["raw"]})
             if _has_payload(repaired):
                 result = repaired
 
@@ -250,15 +292,17 @@ def generate_a2ui_stream(
                     ),
                     "code": "extraction_failed",
                     "raw_response": result.get("raw", ""),
+                    "raw_responses": raw_responses,
                 },
             )
             return
 
         validation = result.get("validation") or {}
         if not validation.get("validation_passed"):
-            repaired = _repair_invalid_payload(
+            repaired, _ = _repair_invalid_payload(
                 provider, system_prompt, result, enable_reasoning,
             )
+            raw_responses.append({"label": "Automatic repair", "response": repaired["raw"]})
             if _has_payload(repaired):
                 result = repaired
                 validation = result.get("validation") or {}
@@ -271,6 +315,7 @@ def generate_a2ui_stream(
                     "code": "validation_failed",
                     "detail": "\n".join(validation.get("validation_errors", [])),
                     "raw_response": result.get("raw", ""),
+                    "raw_responses": raw_responses,
                 },
             )
             return

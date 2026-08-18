@@ -43,14 +43,19 @@ export function ErrorCard({ error }: ErrorCardProps) {
         </p>
       )}
 
-      {error.raw_response && (
+      {(error.raw_responses?.length || error.raw_response) && (
         <details className="mt-1.5">
           <summary className="cursor-pointer select-none text-[11px] text-red-500 hover:text-red-700">
-            Raw model response
+            Raw model response{error.raw_responses && error.raw_responses.length > 1 ? "s" : ""}
           </summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-4 text-red-600">
-            {error.raw_response}
-          </pre>
+          {(error.raw_responses ?? [{ label: "Model response", response: error.raw_response ?? "" }]).map((item) => (
+            <div key={item.label} className="mt-1">
+              <p className="font-medium text-red-600">{item.label}</p>
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-4 text-red-600">
+                {item.response}
+              </pre>
+            </div>
+          ))}
         </details>
       )}
     </div>

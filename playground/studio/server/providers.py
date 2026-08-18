@@ -39,6 +39,8 @@ class StreamToken:
           what the UI shows while the model is "thinking".
         - ``"content"``: the final answer tokens (``delta.content``), which for
           A2UI generation is the JSON protocol text.
+        - ``"finish"``: the provider's completion reason, emitted once when
+          available (for example ``"length"`` when the output was truncated).
     """
 
     kind: str
@@ -308,6 +310,7 @@ class OpenAICompatProvider:
         enable_reasoning: bool | None = None,
         history: list[dict] | None = None,
         image_data_urls: list[str] | None = None,
+        max_tokens: int | None = None,
     ) -> Generator[StreamToken, None, None]:
         """Streaming completion. Yields incremental :class:`StreamToken` items.
 
@@ -338,7 +341,7 @@ class OpenAICompatProvider:
             stream = self._client.chat.completions.create(
                 model=self.model,
                 messages=self._messages(system_prompt, user_prompt, history, image_data_urls),
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens or self.max_tokens,
                 stream=True,
                 timeout=timeout,
                 **extra,
@@ -353,6 +356,9 @@ class OpenAICompatProvider:
                 token = getattr(delta, "content", None) or ""
                 if token:
                     yield StreamToken(kind="content", text=token)
+                finish_reason = chunk.choices[0].finish_reason
+                if finish_reason:
+                    yield StreamToken(kind="finish", text=finish_reason)
         except Exception as exc:  # noqa: BLE001 - reclassify all provider errors
             raise classify_error(exc) from exc
 
