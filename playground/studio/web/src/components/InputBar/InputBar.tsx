@@ -10,6 +10,16 @@ import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
 import type { ImageAttachment } from "@/api/sse";
 
+const LAST_SELECTED_MODEL_KEY = "agenui.studio.last-selected-model";
+
+function readLastSelectedModel(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_SELECTED_MODEL_KEY);
+  } catch {
+    return null;
+  }
+}
+
 interface InputBarProps {
   providers: Provider[];
   active: string | null;
@@ -35,13 +45,30 @@ export function InputBar({
   value,
   onValueChange,
 }: InputBarProps) {
-  const [provider, setProvider] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(readLastSelectedModel);
   const [reasoning, setReasoning] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [setupTipDismissed, setSetupTipDismissed] = useState(false);
 const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<ImageAttachment[]>([]);
+
+  // Keep the persisted choice only while it remains configured. If a provider
+  // was removed, ModelSelector falls back to the server's active provider.
+  useEffect(() => {
+    if (provider && providers.length > 0 && !providers.some((item) => item.name === provider)) {
+      setProvider(null);
+    }
+  }, [provider, providers]);
+
+  const handleProviderChange = (name: string) => {
+    setProvider(name);
+    try {
+      window.localStorage.setItem(LAST_SELECTED_MODEL_KEY, name);
+    } catch {
+      // Storage may be unavailable in private browsing or embedded previews.
+    }
+  };
 
   // Nudge the user to configure a model when no provider has an api_key yet.
   const showSetupTip = providersLoaded && providers.length === 0 && !setupTipDismissed;
@@ -141,7 +168,7 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
               active={active}
               value={provider}
               disabled={isGenerating}
-              onChange={setProvider}
+              onChange={handleProviderChange}
             />
             {/* Settings + reasoning form a tight control cluster. */}
             <div className="flex items-start gap-1.5">
