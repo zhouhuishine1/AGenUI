@@ -65,10 +65,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             // Test mode with file path
             rootVC = UITestViewController(testDataPath: path)
         } else {
-            // Normal mode: Playground
-            let playgroundVC = A2UIPlaygroundViewController()
-            rootVC = UINavigationController(rootViewController: playgroundVC)
-            
+            // Normal mode: Playground (home = scanned-session history list)
+            let historyVC = A2UIScanHistoryViewController()
+            let navController = UINavigationController(rootViewController: historyVC)
+            rootVC = navController
+
             // Support --clear-logs (explicit, independent of --gallery).
             // Only clear sandbox logs when explicitly requested; otherwise per-round
             // cold starts (which always carry --gallery) would wipe previous rounds' logs,
@@ -82,6 +83,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             if autoGallery {
                 // Auto-load Gallery template after view setup
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let playgroundVC = A2UIPlaygroundViewController()
+                    navController.pushViewController(playgroundVC, animated: false)
                     playgroundVC.autoLoadGalleryTemplate()
                 }
             }
@@ -147,14 +150,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         print("[DeepLink] Received a2ui_test URL: \(fileUrl)")
 
-        // Get A2UIPlaygroundViewController and call download handler
+        // Push a playground VC in URL mode from the home root and let it
+        // download + render + persist the session.
         DispatchQueue.main.async {
-            guard let navController = self.window?.rootViewController as? UINavigationController,
-                  let playgroundVC = navController.viewControllers.first as? A2UIPlaygroundViewController else {
-                print("[DeepLink] Failed to get A2UIPlaygroundViewController")
+            guard let navController = self.window?.rootViewController as? UINavigationController else {
+                print("[DeepLink] Failed to get navigation controller")
                 return
             }
-            playgroundVC.downloadAndProcessQRCodeFile(fileUrl)
+            let playgroundVC = A2UIPlaygroundViewController()
+            playgroundVC.entryUrl = fileUrl
+            navController.pushViewController(playgroundVC, animated: true)
         }
     }
 

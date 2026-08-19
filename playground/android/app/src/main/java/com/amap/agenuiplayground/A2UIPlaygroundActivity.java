@@ -81,6 +81,18 @@ import java.util.concurrent.Executors;
  */
 public class A2UIPlaygroundActivity extends AppCompatActivity {
 
+    // Intent extras used when this Activity is launched from the home screen.
+    public static final String EXTRA_SESSION_NAME = "extra_session_name";
+    public static final String EXTRA_CREATE_SURFACE_JSON = "extra_create_surface_json";
+    public static final String EXTRA_UPDATE_COMPONENTS_JSON = "extra_update_components_json";
+    public static final String EXTRA_UPDATE_DATA_MODEL_JSON = "extra_update_data_model_json";
+    public static final String EXTRA_LAUNCH_SCAN = "extra_launch_scan";
+    public static final String EXTRA_STORY_COMPONENTS_JSON = "extra_story_components_json";
+    public static final String EXTRA_STORY_DATA_MODEL_JSON = "extra_story_data_model_json";
+    public static final String EXTRA_OPEN_EDITOR = "extra_open_editor";
+    public static final String EXTRA_LOAD_A2UI_SHOW_ALL = "extra_load_a2ui_show_all";
+    public static final String EXTRA_LOAD_GALLERY_ALL = "extra_load_gallery_all";
+
     // UI Components
     private DrawerLayout drawerLayout;
     private MaterialToolbar toolbar;
@@ -175,6 +187,9 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1002;
     private ExecutorService executorService = Executors.newSingleThreadExecutor();
     private Handler mainHandler = new Handler(Looper.getMainLooper());
+    // Whether the current render came from a QR scan / URL download and should
+    // therefore be persisted to the home-screen scan history.
+    private boolean shouldSaveOnProcess = false;
 
     private static final String TAG = "A2UIPlayground";
 
@@ -233,6 +248,43 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
                 renderGalleryFromAsset();
             }, 500);
         }
+
+        // Entry mode set by the home screen (ScanHistoryActivity).
+        String sessionName = getIntent().getStringExtra(EXTRA_SESSION_NAME);
+        String createSurfaceJson = getIntent().getStringExtra(EXTRA_CREATE_SURFACE_JSON);
+        String updateComponentsJson = getIntent().getStringExtra(EXTRA_UPDATE_COMPONENTS_JSON);
+        String updateDataModelJson = getIntent().getStringExtra(EXTRA_UPDATE_DATA_MODEL_JSON);
+        String storyComponentsJson = getIntent().getStringExtra(EXTRA_STORY_COMPONENTS_JSON);
+        String storyDataModelJson = getIntent().getStringExtra(EXTRA_STORY_DATA_MODEL_JSON);
+        boolean launchScan = getIntent().getBooleanExtra(EXTRA_LAUNCH_SCAN, false);
+        boolean openEditor = getIntent().getBooleanExtra(EXTRA_OPEN_EDITOR, false);
+        boolean loadA2uiShowAll = getIntent().getBooleanExtra(EXTRA_LOAD_A2UI_SHOW_ALL, false);
+        boolean loadGalleryAll = getIntent().getBooleanExtra(EXTRA_LOAD_GALLERY_ALL, false);
+
+        if (sessionName != null && !sessionName.isEmpty()) {
+            updateToolbarTitle(sessionName);
+        }
+        if (createSurfaceJson != null && !createSurfaceJson.isEmpty()) {
+            // Opened a history item: render the stored payload without re-saving.
+            shouldSaveOnProcess = false;
+            processQrCodeJsonData(createSurfaceJson, updateComponentsJson, updateDataModelJson);
+        } else if (storyComponentsJson != null && !storyComponentsJson.isEmpty()) {
+            currentComponentsJson = storyComponentsJson;
+            currentDataModelJson = storyDataModelJson == null ? "{}" : storyDataModelJson;
+            renderComponents();
+        } else if (openEditor) {
+            openEditor(EditorType.COMPONENTS);
+        } else if (loadA2uiShowAll) {
+            loadAllA2UIShowComponents();
+        } else if (loadGalleryAll) {
+            loadAllGalleryComponents();
+        } else if (launchScan) {
+            // "Scan" from the home screen: launch the scanner once the activity
+            // has reached the STARTED/RESUMED state (ActivityResultLauncher cannot
+            // launch during onCreate).
+            shouldSaveOnProcess = true;
+            mainHandler.post(this::startQrCodeScan);
+        }
     }
 
     /**
@@ -283,19 +335,9 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setHomeAsUpIndicator(R.drawable.ic_menu);
+            getSupportActionBar().setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_ab_back_material);
         }
 
-        // Setup ActionBarDrawerToggle
-        drawerToggle = new ActionBarDrawerToggle(
-            this,
-            drawerLayout,
-            toolbar,
-            R.string.drawer_nav_title,
-            R.string.drawer_close
-        );
-        drawerLayout.addDrawerListener(drawerToggle);
-        drawerToggle.syncState();
     }
 
     /**
@@ -484,9 +526,8 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
             // Click "Edit" button, open right edit drawer
             openEditor(EditorType.COMPONENTS);
             return true;
-        } else if (id == R.id.action_scan) {
-            // Click the "Scan" button to launch QR code scanning
-            startQrCodeScan();
+        } else if (id == android.R.id.home) {
+            finish();
             return true;
         }
 
@@ -1135,6 +1176,9 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
      * Download and process the file corresponding to the QR code
      */
     private void downloadAndProcessQrCodeFile(String fileUrl) {
+        // Any QR URL download (scan button / home scan) should be persisted once
+        // rendered, keyed by its surfaceId.
+        shouldSaveOnProcess = true;
         executorService.execute(() -> {
             try {
                 Log.d(TAG, "Starting file download: " + fileUrl);
@@ -1271,6 +1315,28 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
 
             surfaceManager.endTextStream();
 
+            // Persist the scanned session to the home-screen history (keyed by
+            // surfaceId, so re-scanning the same session overwrites rather than
+            // duplicates). Only scan / URL flows save; history re-opens do not.
+            if (shouldSaveOnProcess) {
+                String sessionId = scannedSurfaceId != null ? scannedSurfaceId
+                        : java.util.UUID.randomUUID().toString();
+                String name = extractTitleFromCreateSurface(createSurfaceJson);
+                if (name == null || name.isEmpty()) {
+                    name = "扫描结果";
+                }
+                ScanHistoryStore.ScanHistoryItem item = new ScanHistoryStore.ScanHistoryItem();
+                item.sessionId = sessionId;
+                item.name = name;
+                item.createdAt = System.currentTimeMillis();
+                item.createSurfaceJson = createSurfaceJson == null ? "" : createSurfaceJson;
+                item.updateComponentsJson = updateComponentsJson == null ? "" : updateComponentsJson;
+                item.updateDataModelJson = updateDataModelJson == null ? "" : updateDataModelJson;
+                ScanHistoryStore.upsert(this, item);
+                updateToolbarTitle(name);
+                addLog("Saved session " + sessionId + " to scan history");
+            }
+
             Toast.makeText(this, "QR code content rendered successfully", Toast.LENGTH_SHORT).show();
             addLog("✓ QR code content rendering complete");
         } catch (Exception e) {
@@ -1299,6 +1365,28 @@ public class A2UIPlaygroundActivity extends AppCompatActivity {
             }
         } catch (JSONException e) {
             Log.e(TAG, "Failed to extract surfaceId from createSurface", e);
+        }
+        return null;
+    }
+
+    /**
+     * Extract the human-readable Session title from a createSurface payload.
+     * The Studio server embeds it as createSurface.title; returns null when
+     * absent or empty.
+     */
+    private String extractTitleFromCreateSurface(String createSurfaceJson) {
+        if (createSurfaceJson == null || createSurfaceJson.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject obj = new JSONObject(createSurfaceJson);
+            JSONObject createSurface = obj.optJSONObject("createSurface");
+            if (createSurface != null) {
+                String title = createSurface.optString("title", "");
+                return title.isEmpty() ? null : title;
+            }
+        } catch (JSONException e) {
+            Log.e(TAG, "Failed to extract title from createSurface", e);
         }
         return null;
     }

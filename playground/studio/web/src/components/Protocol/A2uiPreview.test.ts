@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageObjectFit, resolveImageSource } from "./A2uiPreview";
+import { imageObjectFit, previewIcon, resolveImageSource } from "./A2uiPreview";
 
 describe("Image preview helpers", () => {
   const remoteUrl = "https://images.example.test/wide.jpg";
@@ -18,5 +18,9 @@ describe("Image preview helpers", () => {
     expect(imageObjectFit("cover")).toBe("cover");
     expect(imageObjectFit("none")).toBe("none");
     expect(imageObjectFit("scaleDown")).toBe("scale-down");
+  });
+
+  it("maps the A2UI locationOn icon name instead of rendering it as fallback text", () => {
+    expect(previewIcon("locationOn")).toBeDefined();
   });
 });

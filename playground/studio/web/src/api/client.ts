@@ -119,11 +119,26 @@ export async function createSession(title: string): Promise<SessionRecord> {
   return payload;
 }
 
-export async function updateSession(id: string, changes: Partial<Pick<SessionRecord, "title" | "conversation" | "draft" | "protocol_id">>): Promise<SessionRecord> {
+export async function updateSession(id: string, changes: Partial<Pick<SessionRecord, "title" | "conversation" | "draft" | "protocol_id" | "status" | "provider" | "reasoning">>): Promise<SessionRecord> {
   const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
   const payload = await res.json() as SessionRecord & { error?: string };
   if (!res.ok) throw new Error(payload.error || "Could not save session");
   return payload;
+}
+
+export async function generateSessionTitle(id: string, prompt: string): Promise<SessionRecord> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/generate-title`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+  const payload = await res.json() as SessionRecord & { error?: string };
+  if (!res.ok) throw new Error(payload.error || "Could not generate session title");
+  return payload;
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(payload?.error || `DELETE session ${id} failed: ${res.status}`);
+  }
 }
 
 /** Create an ephemeral QR-preview from the current editor payloads. */

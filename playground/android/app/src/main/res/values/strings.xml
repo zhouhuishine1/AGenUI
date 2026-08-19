@@ -47,4 +47,11 @@
     <string name="hint_json_editor">Enter JSON here…</string>
     <string name="hint_no_logs">No logs yet</string>
     <string name="hint_empty_json">{}</string>
+
+    <!-- Scan history home -->
+    <string name="scan_history_title">首页</string>
+    <string name="scan_history_edit">编辑</string>
+    <string name="scan_history_done">完成</string>
+    <string name="action_delete">删除</string>
+    <string name="hint_scan_empty">扫描二维码以开启体验</string>
 </resources>

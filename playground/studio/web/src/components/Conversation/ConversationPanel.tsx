@@ -6,7 +6,7 @@ import { StageStepper } from "./StageStepper";
 import { ThinkingProcess } from "./ThinkingProcess";
 import { ValidationBanner } from "./ValidationBanner";
 import { WaitingIndicator } from "./WaitingIndicator";
-import { SparkleIcon, StopIcon } from "@/components/icons";
+import { EyeIcon, SparkleIcon, StopIcon } from "@/components/icons";
 import type {
   DoneEvent,
   ErrorEvent,
@@ -30,7 +30,7 @@ interface RoundView {
   images: RoundSnapshot["images"];
 }
 
-function AssistantCard({ round }: { round: RoundView }) {
+function AssistantCard({ round, onShow }: { round: RoundView; onShow?: () => void }) {
   const generating = round.live && round.status === "generating";
   const finishedOk = round.done != null;
   // A round that was started (has a prompt) but is neither generating nor
@@ -47,7 +47,7 @@ function AssistantCard({ round }: { round: RoundView }) {
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[92%] space-y-2 rounded-xl rounded-tl-sm border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="group relative w-full max-w-[92%] space-y-2 rounded-xl rounded-tl-sm border border-slate-200 bg-white p-3 shadow-sm">
         <StageStepper
           currentStage={round.currentStage}
           model={round.model}
@@ -74,12 +74,24 @@ function AssistantCard({ round }: { round: RoundView }) {
             Generation stopped by user
           </div>
         )}
+
+        {finishedOk && onShow && (
+          <button
+            type="button"
+            onClick={onShow}
+            title="查看该轮生成的内容"
+            className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-600 opacity-0 shadow-sm transition group-hover:opacity-100 hover:bg-brand-50 hover:text-brand-600"
+          >
+            <EyeIcon size={12} />
+            显示
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function RoundBlock({ round }: { round: RoundView }) {
+function RoundBlock({ round, onShow }: { round: RoundView; onShow?: () => void }) {
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
@@ -94,7 +106,7 @@ function RoundBlock({ round }: { round: RoundView }) {
           )}
         </div>
       </div>
-      <AssistantCard round={round} />
+      <AssistantCard round={round} onShow={onShow} />
     </div>
   );
 }
@@ -115,11 +127,19 @@ export interface LiveRound {
 interface ConversationPanelProps {
   history: RoundSnapshot[];
   live: LiveRound;
+  /** Invoked when the user clicks "显示" on a finished round's card. */
+  onShowRound?: (round: RoundSnapshot) => void;
 }
 
-export function ConversationPanel({ history, live }: ConversationPanelProps) {
+export function ConversationPanel({ history, live, onShowRound }: ConversationPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const showLive = live.status !== "idle" || live.prompt !== "";
+  // A "done" round is already archived into `history`, so it must not also be
+  // rendered as the live block (that duplicated it and leaked another session's
+  // last result into the current session's view).
+  const showLive =
+    live.status === "generating" ||
+    live.status === "error" ||
+    (live.status === "idle" && live.prompt !== "");
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -150,6 +170,7 @@ export function ConversationPanel({ history, live }: ConversationPanelProps) {
           {history.map((snap) => (
             <RoundBlock
               key={snap.id}
+              onShow={onShowRound ? () => onShowRound(snap) : undefined}
               round={{
                 id: snap.id,
                 prompt: snap.prompt,

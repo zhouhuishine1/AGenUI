@@ -1,5 +1,6 @@
 {
   "src": [
+    "pages/ScanHistoryPage",
     "pages/AGenUIDemoPage",
     "pages/UITestPage",
     "stability/StabilityTestPage"

@@ -64,6 +64,11 @@ export interface SessionSummary {
 export interface SessionRecord extends SessionSummary {
   conversation: RoundSnapshot[];
   draft: string;
+  status?: "idle" | "generating";
+  title_generated?: boolean;
+  title_manual?: boolean;
+  provider?: string | null;
+  reasoning?: boolean;
 }
 
 export interface PresetSummary {

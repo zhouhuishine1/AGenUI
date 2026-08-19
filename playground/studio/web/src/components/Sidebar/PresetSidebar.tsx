@@ -1,12 +1,16 @@
 /** Left collapsible sidebar: preset samples + the user's generated protocols. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BoxIcon,
   ChevronDownIcon,
   ClockIcon,
-  RefreshIcon,
+  MoreVerticalIcon,
+  PencilIcon,
   SearchIcon,
+  SettingsIcon,
+  TrashIcon,
+  XIcon,
 } from "@/components/icons";
 import { cn, formatTime } from "@/lib/utils";
 import type { PresetSummary, SessionSummary } from "@/types";
@@ -28,8 +32,12 @@ interface PresetSidebarProps {
   onSelectPreset: (id: string) => void;
   onSelectProtocol: (id: string) => void;
   onSelectGeneration: () => void;
-  onRefresh: () => void;
+  onOpenConfiguration: () => void;
   onNewChat?: () => void;
+  /** Rename a session (throws on failure so the dialog can surface the error). */
+  onRenameSession: (id: string, title: string) => Promise<void>;
+  /** Delete a session (throws on failure so the dialog can surface the error). */
+  onDeleteSession: (id: string) => Promise<void>;
 }
 
 function GroupHeader({
@@ -64,6 +72,166 @@ function GroupHeader({
   );
 }
 
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      onMouseDown={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function RenameDialog({
+  session,
+  onCancel,
+  onSave,
+}: {
+  session: SessionSummary;
+  onCancel: () => void;
+  onSave: (title: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(session.title);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const handleSubmit = async () => {
+    const title = value.trim();
+    if (!title) {
+      setError("名称不能为空");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(title);
+      // On success the parent closes the dialog; nothing to reset here.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="重命名会话" onClose={onCancel}>
+      <label className="mb-1 block text-xs font-medium text-slate-500">
+        会话名称
+      </label>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void handleSubmit();
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="输入新的会话名称"
+        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm text-slate-700 outline-none transition focus:border-brand-500 focus:bg-white"
+      />
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={saving}
+          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-60"
+        >
+          {saving ? "保存中…" : "保存"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteDialog({
+  session,
+  onCancel,
+  onConfirm,
+}: {
+  session: SessionSummary;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Modal title="删除会话" onClose={onCancel}>
+      <p className="text-sm leading-6 text-slate-600">
+        确定要删除会话{" "}
+        <span className="font-medium text-slate-800">“{session.title}”</span>{" "}
+        吗？此操作无法撤销。
+      </p>
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleConfirm()}
+          disabled={deleting}
+          className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-red-600 disabled:opacity-60"
+        >
+          {deleting ? "删除中…" : "删除"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 export function PresetSidebar({
   presets,
   protocols,
@@ -73,12 +241,33 @@ export function PresetSidebar({
   onSelectPreset,
   onSelectProtocol,
   onSelectGeneration,
-  onRefresh,
+  onOpenConfiguration,
   onNewChat,
+  onRenameSession,
+  onDeleteSession,
 }: PresetSidebarProps) {
   const [query, setQuery] = useState("");
   const [presetsOpen, setPresetsOpen] = useState(true);
   const [protocolsOpen, setProtocolsOpen] = useState(true);
+  /** Session whose ⋮ action menu is currently open. */
+  const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
+  /** Session being renamed (null when the dialog is closed). */
+  const [renaming, setRenaming] = useState<SessionSummary | null>(null);
+  /** Session awaiting delete confirmation (null when the dialog is closed). */
+  const [deleting, setDeleting] = useState<SessionSummary | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the ⋮ menu on any click outside of it.
+  useEffect(() => {
+    if (!menuSessionId) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuSessionId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuSessionId]);
 
   const q = query.trim().toLowerCase();
   const filteredPresets = useMemo(
@@ -111,7 +300,7 @@ export function PresetSidebar({
         </div>
       )}
 
-      {/* Search + refresh */}
+      {/* Search + configuration */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-200 p-2">
         <div className="flex flex-1 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 focus-within:border-brand-500 focus-within:bg-white">
           <SearchIcon size={13} className="text-slate-400" />
@@ -124,11 +313,11 @@ export function PresetSidebar({
         </div>
         <button
           type="button"
-          onClick={onRefresh}
-          title="Refresh list"
+          onClick={onOpenConfiguration}
+          title="More configuration"
           className="rounded-lg border border-slate-200 p-1.5 text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
         >
-          <RefreshIcon size={13} className={cn(loading && "animate-spin")} />
+          <SettingsIcon size={13} />
         </button>
       </div>
 
@@ -174,29 +363,78 @@ export function PresetSidebar({
             )}
             {filteredProtocols.map((p) => {
               const active = selection?.kind === "session" && selection.id === p.id;
+              const menuOpen = menuSessionId === p.id;
               return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelectProtocol(p.id)}
-                  title={p.title}
-                  className={cn(
-                    "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition",
-                    active ? "bg-brand-50" : "hover:bg-slate-100",
-                  )}
-                >
-                  <span
+                <div key={p.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => onSelectProtocol(p.id)}
+                    title={p.title}
                     className={cn(
-                      "truncate text-xs",
-                      active ? "font-medium text-brand-600" : "text-slate-600",
+                      "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 pr-7 text-left transition",
+                      active ? "bg-brand-50" : "hover:bg-slate-100",
                     )}
                   >
-                    {p.title}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {formatTime(p.updated_at)}
-                  </span>
-                </button>
+                    <span
+                      className={cn(
+                        "truncate text-xs",
+                        active ? "font-medium text-brand-600" : "text-slate-600",
+                      )}
+                    >
+                      {p.title}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {formatTime(p.updated_at)}
+                    </span>
+                  </button>
+
+                  {/* Hover actions: ⋮ menu with Rename / Delete */}
+                  <div
+                    ref={menuOpen ? menuRef : undefined}
+                    className={cn("absolute right-1 top-1.5", menuOpen && "z-50")}
+                  >
+                    <button
+                      type="button"
+                      title="更多操作"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuSessionId(menuOpen ? null : p.id);
+                      }}
+                      className={cn(
+                        "rounded-md p-1 text-slate-400 transition hover:bg-white hover:text-slate-600",
+                        menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                      )}
+                    >
+                      <MoreVerticalIcon size={14} />
+                    </button>
+                    {menuOpen && (
+                      <div className="absolute right-0 top-6 z-50 w-32 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuSessionId(null);
+                            setRenaming(p);
+                          }}
+                          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-slate-600 transition hover:bg-slate-100"
+                        >
+                          <PencilIcon size={13} className="text-slate-400" />
+                          重命名
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuSessionId(null);
+                            setDeleting(p);
+                          }}
+                          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-red-600 transition hover:bg-red-50"
+                        >
+                          <TrashIcon size={13} />
+                          删除
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -237,6 +475,30 @@ export function PresetSidebar({
           </div>
         )}
       </div>
+
+      {/* Rename dialog */}
+      {renaming && (
+        <RenameDialog
+          session={renaming}
+          onCancel={() => setRenaming(null)}
+          onSave={async (title) => {
+            await onRenameSession(renaming.id, title);
+            setRenaming(null);
+          }}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleting && (
+        <DeleteDialog
+          session={deleting}
+          onCancel={() => setDeleting(null)}
+          onConfirm={async () => {
+            await onDeleteSession(deleting.id);
+            setDeleting(null);
+          }}
+        />
+      )}
     </div>
   );
 }

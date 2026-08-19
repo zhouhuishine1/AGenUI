@@ -29,6 +29,7 @@ class A2UIPlaygroundMenuViewController: UIViewController {
     
     /// Data selection callback closure
     var onDataSelected: ((String?, String?) -> Void)?
+    var onTemplateSelected: ((String, String?, String?) -> Void)?
 
     // MARK: - Lifecycle
     
@@ -261,6 +262,7 @@ class A2UIPlaygroundMenuViewController: UIViewController {
         
         // Pass data back through closure (sent uniformly by main page)
         onDataSelected?(componentsJSON, dataModelJSON)
+        onTemplateSelected?("\(componentType) / \(variant)", componentsJSON, dataModelJSON)
         
         // Close page directly
         dismiss(animated: true)

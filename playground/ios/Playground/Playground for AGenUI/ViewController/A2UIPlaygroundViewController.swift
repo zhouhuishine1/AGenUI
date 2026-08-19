@@ -10,7 +10,7 @@ import AGenUI
 import AVFoundation
 
 class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AVCaptureMetadataOutputObjectsDelegate {
-    
+
     // MARK: - Properties
     
     /// Surface Manager instance
@@ -38,6 +38,27 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
     
     /// Registered functions (strong references to prevent deallocation)
     private let toastFunction = ToastFunction()
+
+    // MARK: - Entry mode (set by the home screen / deep link before push)
+
+    /// Session title to show in the navigation bar (from history or a scan).
+    var entrySessionName: String?
+    /// Stored payloads used when opening a history item (render without saving).
+    var entryCreateSurfaceJson: String?
+    var entryUpdateComponentsJson: String?
+    var entryUpdateDataModelJson: String?
+    /// Template payload selected from the home navigation menu.
+    var entryComponentsJson: String?
+    /// URL to download and render (deep link).
+    var entryUrl: String?
+    /// When true, auto-launch the QR scanner as soon as the view appears.
+    var launchScannerOnAppear = false
+
+    /// Whether the current render came from a QR scan / URL download and should
+    /// therefore be persisted to the scan history store.
+    private var shouldSaveOnProcess = false
+    /// Guards the one-shot entry handling in ``viewDidAppear``.
+    private var didHandleEntry = false
 
     // MARK: - Streaming mode configuration
     private static let streamingModeEnabled = true
@@ -76,6 +97,39 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
         themeManager.surfaceManager = surfaceManager
         
         registerDecoupledComponents()
+
+        // Apply the session title and render a stored payload when opened from
+        // the home history list (no re-save in this path).
+        if let name = entrySessionName, !name.isEmpty {
+            title = name
+        }
+        if let create = entryCreateSurfaceJson, !create.isEmpty {
+            shouldSaveOnProcess = false
+            processQRCodeJsonData(
+                createSurfaceJson: create,
+                updateComponentsJson: entryUpdateComponentsJson,
+                updateDataModelJson: entryUpdateDataModelJson
+            )
+        } else if let components = entryComponentsJson, !components.isEmpty {
+            currentComponentsJSON = components
+            currentDataModelJSON = entryUpdateDataModelJson
+            sendJSONData(componentsJSON: components, dataModelJSON: entryUpdateDataModelJson)
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !didHandleEntry else { return }
+
+        if launchScannerOnAppear {
+            didHandleEntry = true
+            shouldSaveOnProcess = true
+            scanQRCodeButtonTapped()
+        } else if let url = entryUrl, !url.isEmpty {
+            didHandleEntry = true
+            shouldSaveOnProcess = true
+            downloadAndProcessQRCodeFile(url)
+        }
     }
     
     override func viewDidLayoutSubviews() {
@@ -168,18 +222,12 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
         // Set title
         title = "A2UI Playground"
         
-        // Create left menu button
-        let menuButton = UIBarButtonItem(
-            image: UIImage(systemName: "line.3.horizontal"),
-            style: .plain,
-            target: self,
-            action: #selector(menuButtonTapped)
-        )
-        navigationItem.leftBarButtonItem = menuButton
-        
-        // Create right button group
+        // The navigation controller supplies the back button for every detail page.
+        navigationItem.leftBarButtonItem = nil
+
+        // The information icon preserves the existing JSON editor action.
         let editButton = UIBarButtonItem(
-            image: UIImage(systemName: "square.and.pencil"),
+            image: UIImage(systemName: "info.circle"),
             style: .plain,
             target: self,
             action: #selector(editButtonTapped)
@@ -189,35 +237,12 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
         // matching the Android/HarmonyOS playgrounds.
         editBarButtonItem = editButton  // Save reference
 
-        // Create theme button (tapping opens the theme picker directly)
-        let themeButton = createThemeButton()
-
-        // Create scan QR button (promoted to a top-level bar item for
-        // cross-platform consistency with Android/HarmonyOS).
-        let scanButton = UIBarButtonItem(
-            image: UIImage(systemName: "qrcode.viewfinder"),
-            style: .plain,
-            target: self,
-            action: #selector(scanQRCodeButtonTapped)
-        )
-        scanButton.accessibilityLabel = "Scan QR"
-
-        // Visual order (left -> right): Scan | Theme | Edit. Since
-        // rightBarButtonItems index 0 is the rightmost item, the array is
-        // declared in reverse of the visual order. Negative-width fixed
-        // spaces tighten the gaps so the centered performance display gets
-        // more horizontal room.
-        let compactSpace1 = UIBarButtonItem(barButtonSystemItem: .fixedSpace, target: nil, action: nil)
-        compactSpace1.width = -8
-        let compactSpace2 = UIBarButtonItem(barButtonSystemItem: .fixedSpace, target: nil, action: nil)
-        compactSpace2.width = -8
-        navigationItem.rightBarButtonItems = [editButton, compactSpace1, themeButton, compactSpace2, scanButton]
+        navigationItem.rightBarButtonItem = editButton
         
         // Configure navigation bar appearance
         navigationController?.navigationBar.prefersLargeTitles = true
         
-        // Add performance display view to navigation bar
-        setupPerformanceDisplayInNavigationBar()
+        navigationItem.titleView = nil
     }
     
     private func setupPerformanceDisplayInNavigationBar() {
@@ -545,6 +570,10 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
             return
         }
 
+        // Any QR URL download (scan button, deep link) should be persisted once
+        // rendered, keyed by its surfaceId.
+        shouldSaveOnProcess = true
+
         // Create URLSession configuration with timeout settings
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30.0
@@ -739,6 +768,27 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
 
         surfaceManager.endTextStream()
 
+        // Persist the scanned session to the home-screen history (keyed by
+        // surfaceId, so re-scanning the same session overwrites rather than
+        // duplicates). Only scan / URL flows save; history re-opens do not.
+        if shouldSaveOnProcess {
+            let sessionId = scannedSurfaceId ?? UUID().uuidString
+            let name = createSurfaceJson.flatMap { Self.extractTitle(fromCreateSurface: $0) }
+                ?? scannedSurfaceId
+                ?? "A2UI Session"
+            let item = ScanHistoryItem(
+                sessionId: sessionId,
+                name: name,
+                createdAt: Date().timeIntervalSince1970,
+                createSurfaceJson: createSurfaceJson ?? "",
+                updateComponentsJson: updateComponentsJson ?? "",
+                updateDataModelJson: updateDataModelJson ?? ""
+            )
+            ScanHistoryStore.shared.upsert(item)
+            title = name
+            print("[Playground] Saved session \(sessionId) to scan history")
+        }
+
         // Enable the Edit button so the scanned protocol can be edited,
         // matching the menu-selection flow which enables it on data selection.
         editBarButtonItem.isEnabled = true
@@ -771,6 +821,20 @@ class A2UIPlaygroundViewController: UIViewController, SurfaceManagerListener, AV
             return nil
         }
         return sid
+    }
+
+    /// Extract the human-readable Session title from a `createSurface` payload.
+    /// The Studio server embeds it as `createSurface.title`; returns nil when
+    /// absent or empty.
+    private static func extractTitle(fromCreateSurface json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let createSurface = obj["createSurface"] as? [String: Any],
+              let title = createSurface["title"] as? String,
+              !title.isEmpty else {
+            return nil
+        }
+        return title
     }
 
     private func showAlert(title: String, message: String) {

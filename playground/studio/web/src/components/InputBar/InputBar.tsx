@@ -1,11 +1,9 @@
 /** Bottom input bar: model selector (left), auto-growing textarea, send/stop (right). */
 
 import { useEffect, useRef, useState } from "react";
-import { ConfigModal } from "./ConfigModal";
 import { ModelSelector } from "./ModelSelector";
 import { SendButton } from "./SendButton";
-import { SettingsIcon, XIcon } from "@/components/icons";
-import { ImageIcon } from "@/components/icons";
+import { PlusIcon, XIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
 import type { ImageAttachment } from "@/api/sse";
@@ -23,35 +21,38 @@ function readLastSelectedModel(): string | null {
 interface InputBarProps {
   providers: Provider[];
   active: string | null;
-  /** Whether the provider list has finished its initial load (avoids flashing
-   * the setup tip before we know if any api_key is configured). */
-  providersLoaded: boolean;
   isGenerating: boolean;
   onSend: (prompt: string, provider: string | null, reasoning: boolean, images: ImageAttachment[]) => void;
   onStop: () => void;
-  onConfigSaved: () => void;
   value: string;
   onValueChange: (value: string) => void;
+  sessionProvider?: string | null;
+  sessionReasoning?: boolean;
 }
 
 export function InputBar({
   providers,
   active,
-  providersLoaded,
   isGenerating,
   onSend,
   onStop,
-  onConfigSaved,
   value,
   onValueChange,
+  sessionProvider,
+  sessionReasoning,
 }: InputBarProps) {
   const [provider, setProvider] = useState<string | null>(readLastSelectedModel);
   const [reasoning, setReasoning] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
-  const [setupTipDismissed, setSetupTipDismissed] = useState(false);
-const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
   const [images, setImages] = useState<ImageAttachment[]>([]);
+
+  useEffect(() => {
+    if (sessionProvider !== undefined) setProvider(sessionProvider);
+    if (sessionReasoning !== undefined) setReasoning(sessionReasoning);
+  }, [sessionProvider, sessionReasoning]);
 
   // Keep the persisted choice only while it remains configured. If a provider
   // was removed, ModelSelector falls back to the server's active provider.
@@ -70,15 +71,14 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
     }
   };
 
-  // Nudge the user to configure a model when no provider has an api_key yet.
-  const showSetupTip = providersLoaded && providers.length === 0 && !setupTipDismissed;
-
-  // Auto-dismiss the setup tip after 10 seconds.
   useEffect(() => {
-    if (!showSetupTip) return;
-    const timer = window.setTimeout(() => setSetupTipDismissed(true), 10_000);
-    return () => window.clearTimeout(timer);
-  }, [showSetupTip]);
+    if (!addMenuOpen) return;
+    const closeMenu = (event: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) setAddMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, [addMenuOpen]);
 
   const canSend = (value.trim().length > 0 || images.length > 0) && !isGenerating;
 
@@ -158,11 +158,24 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
           )}
         </div>
 
-        {/* Bottom row: model selector + settings + reasoning (left), hint + send/stop (right). */}
+        {/* Bottom row: model selector + add menu (left), send/stop (right). */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} title="Add image" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-600 disabled:opacity-60"><ImageIcon size={14} /></button>
+            <div ref={addMenuRef} className="relative">
+              <button type="button" onClick={() => setAddMenuOpen((open) => !open)} disabled={isGenerating} title="Add options" aria-expanded={addMenuOpen} className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-600 disabled:opacity-60"><PlusIcon size={15} /></button>
+              {addMenuOpen && (
+                <div className="absolute bottom-full left-0 z-20 mb-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                  <button type="button" onClick={() => { fileInputRef.current?.click(); setAddMenuOpen(false); }} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs text-slate-700 transition hover:bg-slate-50">Add image</button>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                    <span>Reasoning</span>
+                    <button type="button" role="switch" aria-label="Reasoning" aria-checked={reasoning} onClick={() => setReasoning((enabled) => !enabled)} className={cn("relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors", reasoning ? "bg-brand-500" : "bg-slate-300")}>
+                      <span className={cn("inline-block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform", reasoning ? "translate-x-[16px]" : "translate-x-[2px]")} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <ModelSelector
               providers={providers}
               active={active}
@@ -170,83 +183,8 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
               disabled={isGenerating}
               onChange={handleProviderChange}
             />
-            {/* Settings + reasoning form a tight control cluster. */}
-            <div className="flex items-start gap-1.5">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfigOpen(true);
-                    setSetupTipDismissed(true);
-                  }}
-                  title="Configure model API keys"
-                  className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
-                >
-                  <SettingsIcon size={14} />
-                </button>
-
-                {showSetupTip && (
-                  <div className="absolute bottom-full left-0 z-20 mb-2.5 w-60 rounded-lg bg-slate-900 px-3 py-2.5 shadow-xl">
-                    {/* Arrow pointing down at the settings button. */}
-                    <span className="absolute -bottom-1 left-3 h-2 w-2 rotate-45 bg-slate-900" />
-                    <div className="flex items-start gap-2">
-                      <p className="flex-1 text-xs leading-relaxed text-slate-100">
-                        No model configured yet — click here to add your API key.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSetupTipDismissed(true)}
-                        aria-label="Dismiss"
-                        className="-mr-1 -mt-0.5 rounded p-0.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
-                      >
-                        <XIcon size={12} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Reasoning switch with hover tooltip. */}
-              <div className="group relative flex h-[30px] items-center gap-1.5">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={reasoning}
-                  onClick={() => setReasoning((r) => !r)}
-                  disabled={isGenerating}
-                  className={cn(
-                    "relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60",
-                    reasoning ? "bg-brand-500" : "bg-slate-300",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-[14px] w-[14px] transform rounded-full bg-white shadow transition-transform duration-200",
-                      reasoning ? "translate-x-[16px]" : "translate-x-[2px]",
-                    )}
-                  />
-                </button>
-                <span
-                  className={cn(
-                    "text-xs font-medium transition-colors",
-                    reasoning ? "text-brand-600" : "text-slate-400",
-                  )}
-                >
-                  Reasoning
-                </span>
-
-                {/* Hover tooltip: warn that reasoning slows generation down. */}
-                <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-[230px] -translate-x-1/2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-center text-[11px] leading-snug text-slate-100 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
-                  <span className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-slate-900" />
-                  Enabling model reasoning may increase generation time
-                </div>
-              </div>
-            </div>
           </div>
           <div className="flex items-center gap-2 pt-1">
-            <span className="hidden text-[11px] text-slate-400 md:block">
-              Enter to send, Shift+Enter for a new line
-            </span>
             <SendButton
               isGenerating={isGenerating}
               canSend={canSend}
@@ -257,12 +195,6 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
         </div>
       </div>
 
-      {/* Config modal */}
-      <ConfigModal
-        open={configOpen}
-        onClose={() => setConfigOpen(false)}
-        onSaved={onConfigSaved}
-      />
     </div>
   );
 }

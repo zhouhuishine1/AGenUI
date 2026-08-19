@@ -182,7 +182,9 @@ def create_session(title: str) -> dict[str, Any]:
     ensure_dirs()
     now = datetime.now().isoformat(timespec="seconds")
     record = {"id": uuid.uuid4().hex[:6], "title": title, "created_at": now,
-              "updated_at": now, "conversation": [], "draft": "", "protocol_id": None}
+              "updated_at": now, "conversation": [], "draft": "", "protocol_id": None,
+              "status": "idle", "title_generated": False, "title_manual": False,
+              "provider": None, "reasoning": False}
     return _write_session(record)
 
 
@@ -208,6 +210,19 @@ def list_sessions() -> list[dict[str, Any]]:
     return sorted(sessions, key=lambda item: item.get("updated_at") or "", reverse=True)
 
 
+def find_session_title_by_protocol(protocol_id: str) -> str | None:
+    """Return the title of the session linked to ``protocol_id``, if any.
+
+    A generated protocol is linked to a Session via ``session.protocol_id``.
+    The Session's ``title`` is what the native Playground should show as the
+    Session name; None when no session references the protocol.
+    """
+    for session in list_sessions():
+        if session.get("protocol_id") == protocol_id and session.get("title"):
+            return session["title"]
+    return None
+
+
 def update_session(session_id: str, **changes: Any) -> dict[str, Any] | None:
     record = load_session(session_id)
     if record is None:
@@ -215,3 +230,15 @@ def update_session(session_id: str, **changes: Any) -> dict[str, Any] | None:
     record.update(changes)
     record["updated_at"] = datetime.now().isoformat(timespec="seconds")
     return _write_session(record)
+
+
+def delete_session(session_id: str) -> bool:
+    """Delete a session by id. Returns True if a file was removed."""
+    path = _session_path(session_id)
+    if path is None or not path.exists():
+        return False
+    try:
+        path.unlink()
+        return True
+    except OSError:
+        return False

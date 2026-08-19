@@ -20,6 +20,8 @@
 		28DD8A9C2F9648850080C60B /* A2UIPlaygroundViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DD8A992F9648850080C60B /* A2UIPlaygroundViewController.swift */; };
 		28DD8A9D2F9648850080C60B /* A2UIPlaygroundMenuViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DD8A982F9648850080C60B /* A2UIPlaygroundMenuViewController.swift */; };
 		28DD8A9E2F9648850080C60B /* A2UIPlaygroundEditViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DD8A972F9648850080C60B /* A2UIPlaygroundEditViewController.swift */; };
+		A2C1A0000000000000000A01 /* ScanHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C1A0000000000000000A02 /* ScanHistoryStore.swift */; };
+		A2C1A0000000000000000A03 /* A2UIScanHistoryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C1A0000000000000000A04 /* A2UIScanHistoryViewController.swift */; };
 		3A1B7F02E8C94D1A8E5F0001 /* MetricsOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1B7F02E8C94D1A8E5F0010 /* MetricsOverlayView.swift */; };
 		3A1B7F02E8C94D1A8E5F0002 /* RealisticScenarioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1B7F02E8C94D1A8E5F0020 /* RealisticScenarioEngine.swift */; };
 		490490F9A4ED00BF94CD2C00 /* StabilityMemoryMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77CDDD317EB7AA30B1DC4C78 /* StabilityMemoryMonitor.swift */; };
@@ -94,6 +96,8 @@
 		28DD8A972F9648850080C60B /* A2UIPlaygroundEditViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPlaygroundEditViewController.swift; sourceTree = "<group>"; };
 		28DD8A982F9648850080C60B /* A2UIPlaygroundMenuViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPlaygroundMenuViewController.swift; sourceTree = "<group>"; };
 		28DD8A992F9648850080C60B /* A2UIPlaygroundViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPlaygroundViewController.swift; sourceTree = "<group>"; };
+		A2C1A0000000000000000A02 /* ScanHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanHistoryStore.swift; sourceTree = "<group>"; };
+		A2C1A0000000000000000A04 /* A2UIScanHistoryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIScanHistoryViewController.swift; sourceTree = "<group>"; };
 		28DD935F2F977D390080C60B /* build-agenui-xcframework.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "build-agenui-xcframework.sh"; sourceTree = "<group>"; };
 		28DDB5792F98C4560080C60B /* Playground-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Playground-Bridging-Header.h"; sourceTree = "<group>"; };
 		2AF4B99B0143B415F070C59D /* MarkdownComponent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownComponent.swift; sourceTree = "<group>"; };
@@ -199,6 +203,7 @@
 				28DD8A902F96476B0080C60B /* PerformanceDisplayView.swift */,
 				28DD8A912F96476B0080C60B /* PerformanceMonitor.swift */,
 				28DD8A922F96476B0080C60B /* ThemeManager.swift */,
+				A2C1A0000000000000000A02 /* ScanHistoryStore.swift */,
 				F9B0C1D2E3F405061708192A /* PlaygroundRuntimeLogger.swift */,
 			);
 			path = Utils;
@@ -210,6 +215,7 @@
 				28DD8A972F9648850080C60B /* A2UIPlaygroundEditViewController.swift */,
 				28DD8A982F9648850080C60B /* A2UIPlaygroundMenuViewController.swift */,
 				28DD8A992F9648850080C60B /* A2UIPlaygroundViewController.swift */,
+				A2C1A0000000000000000A04 /* A2UIScanHistoryViewController.swift */,
 				28DDB5792F98C4560080C60B /* Playground-Bridging-Header.h */,
 				639BBF6F15CEB2075A677483 /* UITestViewController.swift */,
 			);
@@ -656,6 +662,8 @@
 				28DD8A9C2F9648850080C60B /* A2UIPlaygroundViewController.swift in Sources */,
 				28DD8A9D2F9648850080C60B /* A2UIPlaygroundMenuViewController.swift in Sources */,
 				28DD8A9E2F9648850080C60B /* A2UIPlaygroundEditViewController.swift in Sources */,
+				A2C1A0000000000000000A01 /* ScanHistoryStore.swift in Sources */,
+				A2C1A0000000000000000A03 /* A2UIScanHistoryViewController.swift in Sources */,
 				28DD8A952F96476B0080C60B /* PerformanceDisplayView.swift in Sources */,
 				28DD8A962F96476B0080C60B /* PerformanceMonitor.swift in Sources */,
 				28DD879C2F9618FB0080C60B /* SceneDelegate.swift in Sources */,

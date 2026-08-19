@@ -25,3 +25,15 @@
 -dontwarn org.commonmark.ext.gfm.strikethrough.Strikethrough
 -dontwarn org.conscrypt.Conscrypt
 -dontwarn org.conscrypt.OpenSSLProvider
+
+# ---------------------------------------------------------------------------
+# Gson: preserve generic TypeToken signatures. R8/ProGuard would otherwise
+# strip the generic type argument from anonymous subclasses, producing a
+# runtime error "TypeToken must be created with a type argument" (this
+# crashes the app on startup). See ScanHistoryStore:
+#   new TypeToken<List<ScanHistoryItem>>() {}.getType()
+# ---------------------------------------------------------------------------
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken

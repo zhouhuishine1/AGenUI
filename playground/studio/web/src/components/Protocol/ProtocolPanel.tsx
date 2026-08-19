@@ -1,14 +1,19 @@
 /** Right panel: tabbed protocol editors + QR code + save bar. */
 
-import { useEffect, useState } from "react";
+import { redo, undo } from "@codemirror/commands";
+import type { EditorView } from "@codemirror/view";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ProtocolEditor } from "./ProtocolEditor";
 import { PreviewScanStrip } from "./PreviewScanStrip";
 import { SaveBar, type SaveState } from "./SaveBar";
-import { BoxIcon } from "@/components/icons";
+import { BoxIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { A2uiPayload } from "@/types";
 
 type Tab = "components" | "datamodel";
+type HistoryAvailability = { canUndo: boolean; canRedo: boolean };
+
+const EMPTY_HISTORY: HistoryAvailability = { canUndo: false, canRedo: false };
 
 interface ProtocolPanelProps {
   title: string;
@@ -16,6 +21,7 @@ interface ProtocolPanelProps {
   datamodelText: string;
   onComponentsChange: (value: string) => void;
   onDatamodelChange: (value: string) => void;
+  editorScope: string;
   streaming: boolean;
   protocolId: string | null;
   /** Selected preset id (null for non-preset protocols). */
@@ -23,7 +29,6 @@ interface ProtocolPanelProps {
   /** rendering.png URL for the selected preset, or null. */
   renderingUrl: string | null;
   qrUrl: string | null;
-  onPreview: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
   onSave: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
   editableTitle: boolean;
   onTitleChange: (title: string) => Promise<void>;
@@ -36,12 +41,12 @@ export function ProtocolPanel({
   datamodelText,
   onComponentsChange,
   onDatamodelChange,
+  editorScope,
   streaming,
   protocolId,
   presetId,
   renderingUrl,
   qrUrl,
-  onPreview,
   onSave,
   editableTitle,
   onTitleChange,
@@ -50,8 +55,18 @@ export function ProtocolPanel({
   const [tab, setTab] = useState<Tab>("components");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(title);
+  const [componentSelection, setComponentSelection] = useState<{ id: string; seq: number } | null>(null);
+  const [historyAvailability, setHistoryAvailability] = useState<Record<Tab, HistoryAvailability>>({
+    components: EMPTY_HISTORY,
+    datamodel: EMPTY_HISTORY,
+  });
+  const selectionSeqRef = useRef(0);
+  const componentsViewRef = useRef<EditorView | null>(null);
+  const datamodelViewRef = useRef<EditorView | null>(null);
+  const historyStatesRef = useRef<Record<string, Partial<Record<Tab, unknown>>>>({});
 
   useEffect(() => setTitleValue(title), [title]);
   const saveTitle = async () => {
@@ -95,23 +110,28 @@ export function ProtocolPanel({
     }
   };
 
-  const handlePreview = async () => {
-    try {
-      const components = JSON.parse(componentsText || "{}") as A2uiPayload;
-      const datamodel = datamodelText.trim()
-        ? JSON.parse(datamodelText) as A2uiPayload
-        : null;
-      setSaveState("saving");
-      setSaveError(null);
-      await onPreview(components, datamodel);
-      setSaveState("saved");
-    } catch (err) {
-      setSaveState("error");
-      setSaveError(err instanceof Error ? err.message : "Preview failed");
-    }
-  };
+  // Undo/redo operate on the active tab's CodeMirror history.
+  const dispatchHistoryCommand = useCallback((command: (target: { state: EditorView["state"]; dispatch: EditorView["dispatch"] }) => boolean) => {
+    const view = tab === "components" ? componentsViewRef.current : datamodelViewRef.current;
+    if (!view) return;
+    command({ state: view.state, dispatch: view.dispatch });
+  }, [tab]);
 
-  const hasContent = componentsText.trim().length > 0 || datamodelText.trim().length > 0;
+  const handleUndo = () => dispatchHistoryCommand(undo);
+  const handleRedo = () => dispatchHistoryCommand(redo);
+  const activeHistory = historyAvailability[tab];
+  const handleHistoryChange = useCallback((editorTab: Tab, history: HistoryAvailability) => {
+    setHistoryAvailability((current) => current[editorTab].canUndo === history.canUndo && current[editorTab].canRedo === history.canRedo
+      ? current
+      : { ...current, [editorTab]: history });
+  }, []);
+
+  // Preview click -> select the matching JSON object in the components tab.
+  const handleSelectComponent = useCallback((id: string) => {
+    selectionSeqRef.current += 1;
+    setComponentSelection({ id, seq: selectionSeqRef.current });
+    setTab("components");
+  }, []);
 
   return (
     <div className="flex h-full min-w-0 flex-col border-l border-slate-200 bg-slate-50/50">
@@ -138,9 +158,11 @@ export function ProtocolPanel({
         qrUrl={qrUrl}
         componentsText={componentsText}
         datamodelText={datamodelText}
+        onSelectComponent={handleSelectComponent}
+        onParseErrorChange={setParseError}
       />
 
-      {hasContent ? (
+      <>
         <>
           {/* Tabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2 pt-1.5">
@@ -159,31 +181,55 @@ export function ProtocolPanel({
                 {t === "components" ? "updateComponents" : "updateDataModel"}
               </button>
             ))}
-            {presetId && !streaming && (
+            <div className="ml-auto flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => void handlePreview()}
-                className="ml-auto rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-600 transition hover:bg-brand-50"
+                onClick={handleUndo}
+                disabled={streaming || !activeHistory.canUndo}
+                title="Undo"
+                aria-label="Undo"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
               >
-                Preview
+                <UndoIcon size={14} />
               </button>
-            )}
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={streaming || !activeHistory.canRedo}
+                title="Redo"
+                aria-label="Redo"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+              >
+                <RedoIcon size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Editor */}
           <div className="min-h-0 flex-1 overflow-hidden bg-white">
             <div className={cn("h-full", tab !== "components" && "hidden")}>
               <ProtocolEditor
+                key={`${editorScope}-components`}
                 value={componentsText}
                 onChange={onComponentsChange}
                 readOnly={streaming}
+                viewRef={componentsViewRef}
+                onHistoryChange={(history) => handleHistoryChange("components", history)}
+                historyState={historyStatesRef.current[editorScope]?.components}
+                onHistoryStateChange={(state) => { historyStatesRef.current[editorScope] = { ...historyStatesRef.current[editorScope], components: state }; }}
+                selectComponentId={componentSelection}
               />
             </div>
             <div className={cn("h-full", tab !== "datamodel" && "hidden")}>
               <ProtocolEditor
+                key={`${editorScope}-datamodel`}
                 value={datamodelText}
                 onChange={onDatamodelChange}
                 readOnly={streaming}
+                viewRef={datamodelViewRef}
+                onHistoryChange={(history) => handleHistoryChange("datamodel", history)}
+                historyState={historyStatesRef.current[editorScope]?.datamodel}
+                onHistoryStateChange={(state) => { historyStatesRef.current[editorScope] = { ...historyStatesRef.current[editorScope], datamodel: state }; }}
               />
             </div>
           </div>
@@ -194,18 +240,12 @@ export function ProtocolPanel({
               canSave={protocolId != null}
               saveState={saveState}
               saveError={saveError}
+              parseError={parseError}
               onSave={handleSave}
             />
           </div>
         </>
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-          <BoxIcon size={28} className="text-slate-300" />
-          <p className="text-xs text-slate-400">
-            The generated or selected protocol will appear here
-          </p>
-        </div>
-      )}
+      </>
     </div>
   );
 }

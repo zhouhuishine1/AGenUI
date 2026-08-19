@@ -14,11 +14,9 @@ function renderInputBar(currentProviders = providers) {
     <InputBar
       providers={currentProviders}
       active="first"
-      providersLoaded
       isGenerating={false}
       onSend={() => undefined}
       onStop={() => undefined}
-      onConfigSaved={() => undefined}
       value=""
       onValueChange={() => undefined}
     />,
@@ -44,5 +42,17 @@ describe("InputBar model selection", () => {
     localStorage.setItem(LAST_SELECTED_MODEL_KEY, "removed");
     renderInputBar([providers[0]]);
     expect((screen.getByTitle("Select model") as HTMLSelectElement).value).toBe("first");
+  });
+
+  it("opens add options and toggles reasoning from its menu", () => {
+    renderInputBar();
+    fireEvent.click(screen.getByTitle("Add options"));
+
+    expect(screen.getByRole("button", { name: "Add image" })).toBeTruthy();
+    const reasoning = screen.getByRole("switch", { name: "Reasoning" });
+    expect(reasoning.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(reasoning);
+    expect(reasoning.getAttribute("aria-checked")).toBe("true");
   });
 });

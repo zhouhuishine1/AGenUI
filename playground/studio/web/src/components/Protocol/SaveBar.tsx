@@ -10,10 +10,11 @@ interface SaveBarProps {
   canSave: boolean;
   saveState: SaveState;
   saveError: string | null;
+  parseError: string | null;
   onSave: () => void;
 }
 
-export function SaveBar({ canSave, saveState, saveError, onSave }: SaveBarProps) {
+export function SaveBar({ canSave, saveState, saveError, parseError, onSave }: SaveBarProps) {
   return (
     <div className="flex items-center gap-2">
       <button
@@ -50,8 +51,10 @@ export function SaveBar({ canSave, saveState, saveError, onSave }: SaveBarProps)
         )}
       </button>
 
-      {saveState === "error" && saveError && (
-        <span className="text-[11px] text-red-500">{saveError}</span>
+      {(parseError || (saveState === "error" && saveError)) && (
+        <span role={parseError ? "alert" : undefined} className="max-w-72 text-[11px] leading-4 text-red-500 line-clamp-2">
+          {parseError ? `Invalid JSON; showing the last valid preview. ${parseError}` : saveError}
+        </span>
       )}
     </div>
   );

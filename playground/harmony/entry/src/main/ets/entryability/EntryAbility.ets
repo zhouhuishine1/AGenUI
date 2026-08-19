@@ -54,7 +54,7 @@ export default class EntryAbility extends UIAbility {
     const testCase = AppStorage.get<string>('testCase');
     const testDataPath = AppStorage.get<string>('testDataPath');
     const testBundleData = AppStorage.get<string>('testBundleData');
-    const page = (testCase || testDataPath || testBundleData) ? 'pages/UITestPage' : 'pages/AGenUIDemoPage';
+    const page = (testCase || testDataPath || testBundleData) ? 'pages/UITestPage' : 'pages/ScanHistoryPage';
 
     // Register custom fonts BEFORE loading any page content.
     // ArkUI font registration must happen before text nodes are created.

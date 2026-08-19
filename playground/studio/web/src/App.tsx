@@ -1,9 +1,10 @@
 /** AGenUI Studio root: three-column layout + generation orchestration. */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ConversationPanel } from "@/components/Conversation/ConversationPanel";
 import { Header } from "@/components/Header";
 import { InputBar } from "@/components/InputBar/InputBar";
+import { ConfigModal } from "@/components/InputBar/ConfigModal";
 import { ProtocolPanel } from "@/components/Protocol/ProtocolPanel";
 import { PresetSidebar, type Selection } from "@/components/Sidebar/PresetSidebar";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -14,8 +15,9 @@ import {
   fetchProtocol,
   fetchSession,
   createSession,
-  createPreview,
   updateSession,
+  generateSessionTitle,
+  deleteSession,
   updateProtocol,
 } from "@/api/client";
 import type { A2uiPayload, ImageAttachment, RoundSnapshot } from "@/types";
@@ -33,12 +35,21 @@ interface PanelState {
 
 const EMPTY_PANEL: PanelState = {
   title: "",
-  componentsText: "",
+  componentsText: "{}",
   datamodelText: "",
   protocolId: null,
   presetId: null,
   hasRendering: false,
 };
+
+/** Serialize a protocol's two payloads into the two ```json blocks the system
+ * prompt expects for an assistant turn (block 1 = updateComponents, block 2 =
+ * updateDataModel). */
+function protocolBlocks(components: A2uiPayload, datamodel: A2uiPayload | null): string {
+  const blocks = ["```json\n" + JSON.stringify(components, null, 2) + "\n```"];
+  if (datamodel) blocks.push("```json\n" + JSON.stringify(datamodel, null, 2) + "\n```");
+  return blocks.join("\n\n");
+}
 
 export default function App() {
   const gen = useGeneration();
@@ -49,14 +60,25 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>(null);
   const [panel, setPanel] = useState<PanelState>(EMPTY_PANEL);
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [configOpen, setConfigOpen] = useState(false);
+  const [sessionProvider, setSessionProvider] = useState<string | null | undefined>(undefined);
+  const [sessionReasoning, setSessionReasoning] = useState<boolean | undefined>(undefined);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const liveImagesRef = useRef<ImageAttachment[]>([]);
   const finalizedProtocolRef = useRef<string | null>(null);
   const historyRef = useRef<RoundSnapshot[]>([]);
+  const editorDraftsRef = useRef<Record<string, { componentsText: string; datamodelText: string }>>({});
+  /** The session's saved (canonical) protocol — the refinement baseline carried
+   * into the next round. Updated on save / load / generation completion. */
+  const baselineProtocolRef = useRef<{ components: A2uiPayload; datamodel: A2uiPayload | null } | null>(null);
+  /** Owning session + conversation snapshot captured when a round starts, so a
+   * round finishing after the user switches sessions is attributed to the
+   * correct session instead of polluting the one currently on screen. */
+  const generationContextRef = useRef<{ sessionId: string; conversation: RoundSnapshot[] } | null>(null);
+  const archivedGenerationRef = useRef<string | null>(null);
 
   // Whether the right panel currently mirrors the live generation stream.
   // It is re-attached whenever a new round starts and detached as soon as the
@@ -86,11 +108,18 @@ export default function App() {
   // user navigated to a preset/protocol mid-generation, respect that choice
   // and merely refresh the library so the finished protocol shows up in the
   // sidebar for the user to open explicitly.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (gen.status === "done" && gen.done) {
       const d = gen.done;
       if (finalizedProtocolRef.current === d.protocol_id) return;
       finalizedProtocolRef.current = d.protocol_id;
+
+      // Attribute the finished round to the session that started it, even if
+      // the user navigated to another session while it was streaming.
+      const owner = generationContextRef.current;
+      const ownerSessionId = owner?.sessionId ?? sessionIdRef.current;
+      const ownerIsCurrent = ownerSessionId != null && ownerSessionId === sessionIdRef.current;
+
       if (panelAttachedRef.current) {
         setPanel((p) => ({
           title: gen.prompt || p.title,
@@ -100,8 +129,9 @@ export default function App() {
           presetId: null,
           hasRendering: false,
         }));
-        if (sessionIdRef.current) setSelection({ kind: "session", id: sessionIdRef.current });
+        if (ownerSessionId) setSelection({ kind: "session", id: ownerSessionId });
       }
+
       const currentRound: RoundSnapshot = {
         id: d.protocol_id,
         prompt: gen.prompt,
@@ -112,16 +142,36 @@ export default function App() {
         error: null,
         images: liveImagesRef.current,
       };
-      const conversation = [...historyRef.current, currentRound];
-      historyRef.current = conversation;
-      setHistory(conversation);
-      if (sessionIdRef.current) {
-        void updateSession(sessionIdRef.current, { conversation, protocol_id: d.protocol_id }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save chat history"));
+
+      // Append to the owning session's conversation. When the owner is still the
+      // on-screen session, update the live history/state too; otherwise persist
+      // to the owner without touching the session the user is now viewing.
+      const baseConversation = ownerIsCurrent ? historyRef.current : (owner?.conversation ?? []);
+      const conversation = [...baseConversation, currentRound];
+      if (ownerIsCurrent) {
+        historyRef.current = conversation;
+        setHistory(conversation);
+        baselineProtocolRef.current = { components: d.components, datamodel: d.datamodel };
+      }
+      if (ownerSessionId) {
+        void updateSession(ownerSessionId, { conversation, protocol_id: d.protocol_id, status: "idle" }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save chat history"));
       }
       void library.refresh();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gen.status, gen.done, gen.prompt, gen.model, gen.reasoning, gen.thinking, library]);
+
+  useEffect(() => {
+    const owner = generationContextRef.current;
+    if (!owner || gen.status === "generating" || !gen.prompt || gen.done) return;
+    const key = `${owner.sessionId}:${gen.startedAt}`;
+    if (archivedGenerationRef.current === key) return;
+    archivedGenerationRef.current = key;
+    const round: RoundSnapshot = { id: key, prompt: gen.prompt, model: gen.model, reasoning: gen.reasoning, thinking: gen.thinking, done: null, error: gen.error, images: liveImagesRef.current };
+    const conversation = [...owner.conversation, round];
+    if (owner.sessionId === sessionIdRef.current) { historyRef.current = conversation; setHistory(conversation); }
+    void updateSession(owner.sessionId, { conversation, status: "idle" }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save chat history"));
+  }, [gen.status, gen.prompt, gen.done, gen.error, gen.model, gen.reasoning, gen.thinking, gen.startedAt]);
 
   // --- Archive the just-finished round into history when a new one starts ---
   const handleGenerate = useCallback(
@@ -148,32 +198,62 @@ export default function App() {
       liveImagesRef.current = images;
       setSelection({ kind: "generation" });
 
-      // Build multi-turn history from the last completed round (single-turn context).
+      // Capture the owning session + its conversation so the finished round is
+      // attributed correctly even if the user switches sessions mid-stream.
+      generationContextRef.current = { sessionId: activeSessionId, conversation: historyRef.current };
+      archivedGenerationRef.current = null;
+      void updateSession(activeSessionId, { status: "generating" });
+      void updateSession(activeSessionId, { provider, reasoning });
+      void generateSessionTitle(activeSessionId, prompt).then((session) => {
+        if (sessionIdRef.current === session.id) setPanel((current) => ({ ...current, title: session.title }));
+        void library.refresh();
+      }).catch(() => undefined);
+
+      // Build the multi-turn context from THIS session's conversation — never the
+      // global generation state, which leaks across sessions and pollutes other
+      // sessions. Prior rounds supply the chat history; the trailing assistant
+      // message carries the session's saved (canonical) protocol as the baseline.
+      //
       // The assistant message must mirror the exact two-fenced-block output format
       // the system prompt demands (block 1 = updateComponents, block 2 =
-      // updateDataModel). gen.done.components / gen.done.datamodel are already the
-      // full {"version", "updateComponents"} / {"version", "updateDataModel"} objects,
-      // so each is stringified into its own ```json block. Feeding the model a single
-      // combined object here makes it echo that shape back, which the two-block
-      // extractor cannot parse (-> "Could not extract A2UI protocol").
+      // updateDataModel). components/datamodel are already the full
+      // {"version", "updateComponents"} / {"version", "updateDataModel"} objects,
+      // so each is stringified into its own ```json block.
       const chatHistory: ChatMessage[] = [];
-      if (gen.prompt && gen.done?.components) {
-        const blocks = [
-          "```json\n" + JSON.stringify(gen.done.components, null, 2) + "\n```",
-        ];
-        if (gen.done.datamodel) {
-          blocks.push("```json\n" + JSON.stringify(gen.done.datamodel, null, 2) + "\n```");
-        }
+      for (const round of historyRef.current) {
+        if (!round.done?.components) continue;
         chatHistory.push(
-          { role: "user", content: gen.prompt },
-          { role: "assistant", content: blocks.join("\n\n") },
+          { role: "user", content: round.prompt },
+          { role: "assistant", content: protocolBlocks(round.done.components, round.done.datamodel) },
         );
+      }
+      const baseline = baselineProtocolRef.current;
+      if (baseline?.components && chatHistory.length > 0) {
+        const baselineContent = protocolBlocks(baseline.components, baseline.datamodel);
+        const tail = chatHistory[chatHistory.length - 1];
+        if (tail.role === "assistant" && tail.content !== baselineContent) {
+          chatHistory[chatHistory.length - 1] = { role: "assistant", content: baselineContent };
+        }
       }
 
       gen.generate(prompt, "component", provider, reasoning, chatHistory, images);
     },
     [gen, library],
   );
+
+  // --- Show a finished round's protocol in the right panel ---
+  // Replaces the editor/preview with that round's generated payloads without
+  // changing the session's saved (canonical) protocol, so "Save" still commits
+  // to the session rather than to the displayed round.
+  const handleShowRound = useCallback((round: RoundSnapshot) => {
+    if (!round.done) return;
+    panelAttachedRef.current = false;
+    setPanel((p) => ({
+      ...p,
+      componentsText: round.done?.components ? JSON.stringify(round.done.components, null, 2) : "",
+      datamodelText: round.done?.datamodel ? JSON.stringify(round.done.datamodel, null, 2) : "",
+    }));
+  }, []);
 
   // --- New chat: start a brand-new conversation ---
   // Clears the archived history and the live round (aborting any in-flight
@@ -186,14 +266,17 @@ export default function App() {
       let title = "New Session";
       while (existingTitles.has(title)) title = `New Session ${number++}`;
       const session = await createSession(title);
+      editorDraftsRef.current[session.id] = { componentsText: "{}", datamodelText: "" };
       sessionIdRef.current = session.id;
       setSessionId(session.id);
       setSelection({ kind: "session", id: session.id });
-    historyRef.current = [];
+      historyRef.current = [];
       setHistory([]);
+      baselineProtocolRef.current = null;
+      generationContextRef.current = null;
       gen.reset();
       panelAttachedRef.current = false;
-      setPanel({ ...EMPTY_PANEL, title: session.title });
+      setPanel({ ...EMPTY_PANEL, title: session.title, componentsText: "{}" });
     setDraft("");
     setSessionError(null);
     liveImagesRef.current = [];
@@ -219,45 +302,60 @@ export default function App() {
         presetId: rec.id,
         hasRendering: rec.has_rendering ?? false,
       });
-      setPreviewUrl(null);
       setSessionId(null);
       sessionIdRef.current = null;
       setDraft("");
       setHistory([]);
       historyRef.current = [];
+      baselineProtocolRef.current = null;
     } catch {
       // ignore load errors for now
     }
   }, []);
-
   // --- Load a generated protocol into the panel ---
   const handleSelectProtocol = useCallback(async (id: string) => {
     try {
       const rec = await fetchSession(id);
-      // Selecting a protocol detaches the panel from any in-flight stream.
-      panelAttachedRef.current = false;
+      const isRunningSession = gen.isGenerating && generationContextRef.current?.sessionId === rec.id;
+      // Selecting an historical session detaches the panel from any in-flight
+      // stream. Selecting the stream's owner re-attaches it so both columns
+      // recover the live response after switching back.
+      panelAttachedRef.current = isRunningSession;
       setSelection({ kind: "session", id });
       const protocol = rec.protocol_id ? await fetchProtocol(rec.protocol_id) : null;
+      const draft = editorDraftsRef.current[rec.id];
+      baselineProtocolRef.current = protocol ? { components: protocol.components, datamodel: protocol.datamodel } : null;
       setPanel({
         title: rec.title,
-        componentsText: protocol?.components ? JSON.stringify(protocol.components, null, 2) : "",
-        datamodelText: protocol?.datamodel ? JSON.stringify(protocol.datamodel, null, 2) : "",
+        componentsText: draft?.componentsText ?? (protocol?.components ? JSON.stringify(protocol.components, null, 2) : "{}"),
+        datamodelText: draft?.datamodelText ?? (protocol?.datamodel ? JSON.stringify(protocol.datamodel, null, 2) : ""),
         protocolId: rec.protocol_id,
         presetId: null,
         hasRendering: false,
       });
-      setPreviewUrl(null);
       const recovered: RoundSnapshot[] = rec.conversation.map((round) => ({ ...round, images: round.images ?? [] }));
       historyRef.current = recovered;
       setHistory(recovered);
       setSessionId(rec.id);
       sessionIdRef.current = rec.id;
       setDraft(rec.draft);
+      setSessionProvider(rec.provider);
+      setSessionReasoning(rec.reasoning);
       setSessionError(null);
+      if (isRunningSession) {
+        setPanel({
+          title: gen.prompt || rec.title,
+          componentsText: gen.componentsText,
+          datamodelText: gen.datamodelText,
+          protocolId: null,
+          presetId: null,
+          hasRendering: false,
+        });
+      }
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : "Could not load chat history");
     }
-  }, []);
+  }, [gen.isGenerating, gen.prompt, gen.componentsText, gen.datamodelText]);
 
   const handleDraftChange = useCallback((value: string) => {
     setDraft(value);
@@ -268,6 +366,35 @@ export default function App() {
     if (!sessionIdRef.current) return;
     const session = await updateSession(sessionIdRef.current, { title });
     setPanel((current) => ({ ...current, title: session.title }));
+    await library.refresh();
+  }, [library]);
+
+  // --- Rename a session from the sidebar ⋮ menu ---
+  const handleRenameSession = useCallback(async (id: string, title: string) => {
+    const session = await updateSession(id, { title });
+    if (sessionIdRef.current === id) {
+      setPanel((current) => ({ ...current, title: session.title }));
+    }
+    await library.refresh();
+  }, [library]);
+
+  // --- Delete a session from the sidebar ⋮ menu ---
+  const handleDeleteSession = useCallback(async (id: string) => {
+    await deleteSession(id);
+    if (sessionIdRef.current === id) {
+      // The session being viewed is gone: reset back to a pristine state.
+      sessionIdRef.current = null;
+      setSessionId(null);
+      setSelection(null);
+      historyRef.current = [];
+      setHistory([]);
+      baselineProtocolRef.current = null;
+      delete editorDraftsRef.current[id];
+      generationContextRef.current = null;
+      setDraft("");
+      setPanel(EMPTY_PANEL);
+      liveImagesRef.current = [];
+    }
     await library.refresh();
   }, [library]);
 
@@ -294,22 +421,18 @@ export default function App() {
     async (components: A2uiPayload, datamodel: A2uiPayload | null) => {
       if (!panel.protocolId) throw new Error("No protocol to save");
       await updateProtocol(panel.protocolId, components, datamodel);
+      baselineProtocolRef.current = { components, datamodel };
       void library.refresh();
     },
     [panel.protocolId, library],
   );
 
-  const handlePreview = useCallback(async (components: A2uiPayload, datamodel: A2uiPayload | null) => {
-    const preview = await createPreview(components, datamodel);
-    setPreviewUrl(preview.url);
-  }, []);
-
   // --- QR code URL ---
-  const qrUrl = previewUrl ?? (serverInfo && panel.protocolId
+  const qrUrl = serverInfo && panel.protocolId
       ? `${serverInfo.base_url}/api/protocols/${panel.protocolId}/raw`
       : serverInfo && panel.presetId
         ? `${serverInfo.base_url}/api/presets/${panel.presetId}/raw`
-        : null);
+        : null;
 
   // --- Reference rendering URL (presets only, when rendering.png exists) ---
   const renderingUrl =
@@ -320,6 +443,7 @@ export default function App() {
   // The in-flight generation is surfaced at the top of "My Generations" so it
   // can be re-opened after the user browses other presets/protocols.
   const liveGeneration = gen.isGenerating ? { prompt: gen.prompt } : null;
+  const selectedSessionGenerating = gen.isGenerating && generationContextRef.current?.sessionId === sessionId;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -340,8 +464,10 @@ export default function App() {
             onSelectPreset={handleSelectPreset}
             onSelectProtocol={handleSelectProtocol}
             onSelectGeneration={handleSelectLiveGeneration}
-            onRefresh={library.refresh}
+            onOpenConfiguration={() => setConfigOpen(true)}
             onNewChat={handleNewChat}
+            onRenameSession={handleRenameSession}
+            onDeleteSession={handleDeleteSession}
           />
         )}
 
@@ -350,29 +476,30 @@ export default function App() {
           {sessionError && <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{sessionError}</div>}
           <ConversationPanel
             history={history}
+            onShowRound={handleShowRound}
             live={{
-              status: gen.status,
-              prompt: gen.prompt,
-              model: gen.model,
-              currentStage: gen.currentStage,
-              reasoning: gen.reasoning,
-              thinking: gen.thinking,
-              startedAt: gen.startedAt,
-              done: gen.done,
-              error: gen.error,
-              images: liveImagesRef.current,
+              status: selectedSessionGenerating ? gen.status : "idle",
+              prompt: selectedSessionGenerating ? gen.prompt : "",
+              model: selectedSessionGenerating ? gen.model : null,
+              currentStage: selectedSessionGenerating ? gen.currentStage : null,
+              reasoning: selectedSessionGenerating ? gen.reasoning : "",
+              thinking: selectedSessionGenerating ? gen.thinking : "",
+              startedAt: selectedSessionGenerating ? gen.startedAt : null,
+              done: selectedSessionGenerating ? gen.done : null,
+              error: selectedSessionGenerating ? gen.error : null,
+              images: selectedSessionGenerating ? liveImagesRef.current : [],
             }}
           />
           <InputBar
             providers={providers}
             active={active}
-            providersLoaded={loaded}
-            isGenerating={gen.isGenerating}
+            isGenerating={selectedSessionGenerating}
             onSend={handleGenerate}
             onStop={gen.stop}
-            onConfigSaved={refresh}
             value={draft}
             onValueChange={handleDraftChange}
+            sessionProvider={sessionProvider}
+            sessionReasoning={sessionReasoning}
           />
         </div>}
 
@@ -382,21 +509,26 @@ export default function App() {
             title={panel.title}
             componentsText={panel.componentsText}
             datamodelText={panel.datamodelText}
-            onComponentsChange={(v) => setPanel((p) => ({ ...p, componentsText: v }))}
-            onDatamodelChange={(v) => setPanel((p) => ({ ...p, datamodelText: v }))}
-            streaming={gen.isGenerating && panelAttachedRef.current}
+            onComponentsChange={(v) => setPanel((p) => { if (sessionIdRef.current) editorDraftsRef.current[sessionIdRef.current] = { componentsText: v, datamodelText: p.datamodelText }; return { ...p, componentsText: v }; })}
+            onDatamodelChange={(v) => setPanel((p) => { if (sessionIdRef.current) editorDraftsRef.current[sessionIdRef.current] = { componentsText: p.componentsText, datamodelText: v }; return { ...p, datamodelText: v }; })}
+            editorScope={sessionId ? `session:${sessionId}` : selection?.kind ?? "empty"}
+            streaming={selectedSessionGenerating && panelAttachedRef.current}
             protocolId={panel.protocolId}
             presetId={panel.presetId}
             renderingUrl={renderingUrl}
             qrUrl={qrUrl}
             onSave={handleSave}
-            onPreview={handlePreview}
             editableTitle={selection?.kind === "session"}
             onTitleChange={handleTitleChange}
             onTitleError={setSessionError}
           />
         </div>
       </div>
+      <ConfigModal
+        open={configOpen}
+        onClose={() => setConfigOpen(false)}
+        onSaved={refresh}
+      />
     </div>
   );
 }

@@ -33,7 +33,7 @@ from .config import (
     save_config,
 )
 from .generator import GenerationEvent, generate_a2ui_stream, generate_a2ui_sync
-from .providers import build_provider
+from .providers import ProviderError, build_provider
 
 
 app = FastAPI(title="AGenUI Studio", version="0.1.0")
@@ -340,8 +340,17 @@ def get_protocol_raw(protocol_id: str):
     record = storage.load_protocol(protocol_id)
     if record is None:
         return JSONResponse(status_code=404, content={"error": "protocol not found"})
+
+    # Prefer the linked Session's title (the Session name shown in the Studio
+    # sidebar), then fall back to a short prompt summary so presets/protocols
+    # without a Session still get a readable name.
+    title = storage.find_session_title_by_protocol(protocol_id)
+    if not title:
+        prompt = (record.get("prompt") or "").strip()
+        title = prompt[:40] + ("..." if len(prompt) > 40 else "") if prompt else None
+
     sequence = render_sequence.build_render_sequence(
-        record.get("components"), record.get("datamodel")
+        record.get("components"), record.get("datamodel"), title=title
     )
     if sequence is None:
         return JSONResponse(
@@ -374,6 +383,13 @@ class SessionUpdateRequest(BaseModel):
     conversation: list[dict[str, Any]] | None = None
     draft: str | None = None
     protocol_id: str | None = None
+    status: str | None = None
+    provider: str | None = None
+    reasoning: bool | None = None
+
+
+class SessionTitleRequest(BaseModel):
+    prompt: str
 
 
 def _validate_session_title(title: str, session_id: str | None = None) -> str:
@@ -414,12 +430,39 @@ def update_session(session_id: str, req: SessionUpdateRequest):
         changes = req.model_dump(exclude_none=True)
         if "title" in changes:
             changes["title"] = _validate_session_title(changes["title"], session_id)
+            changes["title_manual"] = True
         record = storage.update_session(session_id, **changes)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
     if record is None:
         return JSONResponse(status_code=404, content={"error": "session not found"})
     return record
+
+
+@app.post("/api/sessions/{session_id}/generate-title")
+def generate_session_title(session_id: str, req: SessionTitleRequest):
+    record = storage.load_session(session_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"error": "session not found"})
+    if record.get("title_manual") or record.get("title_generated"):
+        return record
+    storage.update_session(session_id, title_generated=True)
+    provider = _resolve_provider(None)
+    if provider is None:
+        return storage.load_session(session_id)
+    try:
+        title = provider.chat("用中文为用户请求生成一个简洁的会话标题。只输出标题，不要引号，不超过50个汉字。", req.prompt).strip().strip('"“”')[:50]
+        if title:
+            return storage.update_session(session_id, title=title) or record
+    except ProviderError:
+        pass
+    return storage.load_session(session_id)
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: str) -> dict[str, Any]:
+    deleted = storage.delete_session(session_id)
+    return {"deleted": deleted}
 
 
 @app.post("/api/preview")
@@ -429,7 +472,7 @@ def create_preview(req: ProtocolUpdateRequest, request: Request):
     Unlike a saved protocol this is deliberately ephemeral: pressing Preview
     never overwrites a preset or a generated record.
     """
-    sequence = render_sequence.build_render_sequence(req.components, req.datamodel)
+    sequence = render_sequence.build_render_sequence(req.components, req.datamodel, title="A2UI Preview")
     if sequence is None:
         return JSONResponse(
             status_code=400,
@@ -491,7 +534,7 @@ def get_preset_raw(preset_id: str):
     if preset is None:
         return JSONResponse(status_code=404, content={"error": "preset not found"})
     sequence = render_sequence.build_render_sequence(
-        preset.get("components"), preset.get("datamodel")
+        preset.get("components"), preset.get("datamodel"), title=preset.get("name")
     )
     if sequence is None:
         return JSONResponse(

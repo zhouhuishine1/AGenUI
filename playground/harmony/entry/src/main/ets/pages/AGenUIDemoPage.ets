@@ -2,7 +2,7 @@ import { resourceManager } from '@kit.LocalizationKit';
 import { JSON } from '@kit.ArkTS';
 import util from '@ohos.util';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { UIContext, promptAction } from '@kit.ArkUI';
+import { UIContext, promptAction, router } from '@kit.ArkUI';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -21,6 +21,7 @@ import { OpenUrlFunction } from '../functions/OpenUrlFunction';
 import { PlaygroundRuntimeLogger } from '../utils/PlaygroundRuntimeLogger';
 
 import { copyRawfileDirToSandbox } from '../utils/ResourceCopyUtil';
+import { ScanHistoryItem, upsertScanHistory } from '../utils/ScanHistoryStore';
 
 // Theme color constants
 const COLOR_PRIMARY_LIGHT = '#6200EE';
@@ -146,6 +147,33 @@ interface ComponentsData {
   updateComponents?: UpdateComponentsData;
 }
 
+/** Router params passed from the home screen (ScanHistoryPage). */
+interface EntryParams {
+  /** When true, auto-launch the QR scanner. */
+  launchScan?: boolean;
+  /** Session title (from history). */
+  sessionName?: string;
+  /** Stored payloads (from history). */
+  createSurfaceJson?: string;
+  updateComponentsJson?: string;
+  updateDataModelJson?: string;
+  /** Open the template drawer immediately when entered from the home menu. */
+  openDrawer?: boolean;
+}
+
+/** Shape of the createSurface event (element 0 of the QR render sequence). */
+interface CreateSurfaceData {
+  surfaceId?: string;
+  catalogId?: string;
+  sendDataModel?: boolean;
+  title?: string;
+}
+
+interface CreateSurfaceEvent {
+  version?: string;
+  createSurface?: CreateSurfaceData;
+}
+
 @Entry
 @Component
 struct Index {
@@ -175,6 +203,8 @@ struct Index {
   @State isDarkMode: boolean = false;
   /** Text shown in the top error banner (empty string hides the banner). */
   @State errorBannerText: string = '';
+  /** Whether this page was opened from the home screen (scan history). */
+  @State fromHome: boolean = false;
 
   /** setTimeout handle used to auto-dismiss the error banner. */
   private errorBannerTimer: number = -1;
@@ -182,6 +212,14 @@ struct Index {
   private surfaceManager: SurfaceManager | null = null;
   private measurementManager: MeasurementManager | null = null;
   private runtimeLogger: PlaygroundRuntimeLogger | null = null;
+
+  // Entry-mode state read from router params (home screen / deep link).
+  private entryHandled: boolean = false;
+  private launchScanOnEntry: boolean = false;
+  private entrySessionName: string = '';
+  private entryCreateSurfaceJson: string = '';
+  private entryUpdateComponentsJson: string = '';
+  private entryUpdateDataModelJson: string = '';
 
   /**
    * Registers the demo-specific host functions and custom components used by
@@ -279,6 +317,23 @@ struct Index {
 
   /** Lifecycle: initializes the SurfaceManager, registers SDK functions/components, and loads the story menu. */
   aboutToAppear() {
+    // Read router params from the home screen (ScanHistoryPage).
+    const params = router.getParams() as EntryParams;
+    if (params) {
+      this.launchScanOnEntry = params.launchScan === true;
+      this.entrySessionName = params.sessionName ?? '';
+      this.entryCreateSurfaceJson = params.createSurfaceJson ?? '';
+      this.entryUpdateComponentsJson = params.updateComponentsJson ?? '';
+      this.entryUpdateDataModelJson = params.updateDataModelJson ?? '';
+      this.isDrawerOpen = params.openDrawer === true;
+      if (this.launchScanOnEntry || this.entrySessionName.length > 0 || this.entryCreateSurfaceJson.length > 0) {
+        this.fromHome = true;
+      }
+      if (this.entrySessionName.length > 0) {
+        this.currentTitle = this.entrySessionName;
+      }
+    }
+
     // Copy rawfile assets into the sandbox and initialize the SDK.
     const context = getContext(this) as common.UIAbilityContext;
     
@@ -368,6 +423,23 @@ struct Index {
   /** Lifecycle: stores the UIContext in AppStorage so child components can access it after the first build. */
   onDidBuild(): void {
     AppStorage.setOrCreate<UIContext>('context', this.getUIContext());
+  }
+
+  /** Lifecycle: handles one-shot entry actions once the page is shown. */
+  onPageShow(): void {
+    if (this.entryHandled) {
+      return;
+    }
+    this.entryHandled = true;
+    if (this.launchScanOnEntry) {
+      this.startQrScan();
+    } else if (this.entryCreateSurfaceJson.length > 0) {
+      this.renderSessionFromStrings(
+        this.entryCreateSurfaceJson,
+        this.entryUpdateComponentsJson,
+        this.entryUpdateDataModelJson
+      );
+    }
   }
 
   /**
@@ -798,7 +870,66 @@ struct Index {
     // Keep the editor model in sync so Edit shows the scanned payloads.
     this.componentsJson = JSON.stringify(updateComponents, null, 2);
     this.dataModelJson = JSON.stringify(updateDataModel, null, 2);
-    this.currentTitle = 'QR Scan';
+
+    // Persist the scanned session to the home-screen history (keyed by
+    // surfaceId, so re-scanning the same session overwrites rather than
+    // duplicates).
+    const csEvent = createSurface as CreateSurfaceEvent;
+    const surfaceId = csEvent.createSurface?.surfaceId ?? '';
+    const title = csEvent.createSurface?.title ?? '';
+    if (surfaceId.length > 0) {
+      const context = getContext(this) as common.UIAbilityContext;
+      const item: ScanHistoryItem = {
+        sessionId: surfaceId,
+        name: title.length > 0 ? title : surfaceId,
+        createdAt: Date.now(),
+        createSurfaceJson: JSON.stringify(createSurface),
+        updateComponentsJson: JSON.stringify(updateComponents),
+        updateDataModelJson: JSON.stringify(updateDataModel)
+      };
+      upsertScanHistory(context, item);
+      this.currentTitle = item.name;
+    } else {
+      this.currentTitle = '扫描结果';
+    }
+  }
+
+  /**
+   * Renders a stored session (opened from the home-screen history list) without
+   * re-saving it. Feeds the three stored JSON strings through the same
+   * surface lifecycle as a QR scan.
+   */
+  private renderSessionFromStrings(createSurfaceJson: string, updateComponentsJson: string, updateDataModelJson: string): void {
+    if (this.surfaceManager === null) {
+      this.showErrorBanner('surfaceManager is null, cannot render stored session');
+      return;
+    }
+    try {
+      this.surfaceManager.beginTextStream();
+
+      if (this.currentSurfaceId) {
+        const deleteSurfaceJsonStr =
+          `{"version":"${API_VERSION}","deleteSurface":{"surfaceId":"${this.currentSurfaceId}"}}`;
+        this.surfaceManager.receiveTextChunk(deleteSurfaceJsonStr);
+      }
+
+      if (createSurfaceJson.length > 0) {
+        this.surfaceManager.receiveTextChunk(createSurfaceJson);
+      }
+      if (updateComponentsJson.length > 0 && updateComponentsJson !== '{}') {
+        this.sendComponentsJson(updateComponentsJson);
+      }
+      if (updateDataModelJson.length > 0 && updateDataModelJson !== '{}') {
+        this.surfaceManager.receiveTextChunk(updateDataModelJson);
+      }
+
+      this.surfaceManager.endTextStream();
+
+      this.componentsJson = updateComponentsJson;
+      this.dataModelJson = updateDataModelJson;
+    } catch (e) {
+      this.showErrorBanner('Failed to render stored session');
+    }
   }
 
   /** Toggles the left navigation drawer open or closed. */
@@ -916,50 +1047,27 @@ struct Index {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         Row() {
-          Image($r('app.media.ic_menu'))
-            .width(24)
-            .height(24)
-            .margin({ left: 16 })
+          Text('‹')
+            .fontSize(28)
+            .fontColor(Color.White)
+            .margin({ left: 8 })
+            .width(36)
+            .textAlign(TextAlign.Center)
             .onClick(() => {
-              this.toggleDrawer();
+              router.back();
             })
 
           Text(this.currentTitle)
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
             .fontColor(Color.White)
-            .margin({ left: 16 })
             .layoutWeight(1)
+            .textAlign(TextAlign.Center)
 
-          Image($r('app.media.ic_scan'))
-            .width(24)
-            .height(24)
-            .margin({ right: 16 })
-            .onClick(() => {
-              this.startQrScan();
-            })
-
-          Row() {
-            Text(this.isDarkMode ? '🌙' : '☀️')
-              .fontSize(14)
-              .fontColor(Color.White)
-              .margin({ right: 4 })
-            Toggle({ type: ToggleType.Switch, isOn: this.isDarkMode })
-              .width(40)
-              .height(22)
-              .selectedColor(COLOR_ACCENT_SECONDARY)
-              .onChange((isOn: boolean) => {
-                this.isDarkMode = isOn;
-                this.applyThemeMode(isOn);
-              })
-          }
-          .margin({ right: 12 })
-          .alignItems(VerticalAlign.Center)
-
-          Text('Edit')
-            .fontSize(16)
+          Text('ⓘ')
+            .fontSize(24)
             .fontColor(Color.White)
-            .margin({ right: 16 })
+            .margin({ right: 16, left: 8 })
             .onClick(() => {
               this.openEditor();
             })

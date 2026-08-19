@@ -28,6 +28,7 @@ DEFAULT_CATALOG_ID = "https://a2ui.org/specification/v0_9/basic_catalog.json"
 def build_render_sequence(
     components: dict[str, Any] | None,
     datamodel: dict[str, Any] | None,
+    title: str | None = None,
 ) -> list[dict[str, Any]] | None:
     """Build ``[createSurface, updateComponents, updateDataModel]`` for QR-scan.
 
@@ -37,6 +38,11 @@ def build_render_sequence(
     in which case an empty object placeholder keeps the array at three elements
     (iOS requires ``count >= 3`` and Android reads ``index 2`` unconditionally).
 
+    ``title`` is the human-readable Session name surfaced to the native
+    Playground home screen. It is embedded as ``createSurface.title`` (an
+    extension field the A2UI engine ignores) so the Playground can display and
+    persist a stable name without a second metadata round-trip.
+
     Returns None when ``components`` is missing or has no ``surfaceId`` (the
     caller should treat that as a malformed protocol).
     """
@@ -44,13 +50,17 @@ def build_render_sequence(
     if not surface_id:
         return None
 
+    create_surface_data: dict[str, Any] = {
+        "surfaceId": surface_id,
+        "catalogId": DEFAULT_CATALOG_ID,
+        "sendDataModel": True,
+    }
+    if title:
+        create_surface_data["title"] = title
+
     create_surface: dict[str, Any] = {
         "version": (components or {}).get("version", "v0.9"),
-        "createSurface": {
-            "surfaceId": surface_id,
-            "catalogId": DEFAULT_CATALOG_ID,
-            "sendDataModel": True,
-        },
+        "createSurface": create_surface_data,
     }
 
     return [create_surface, components, datamodel if datamodel is not None else {}]

@@ -21,7 +21,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
         <activity
-            android:name=".A2UIPlaygroundActivity"
+            android:name=".ScanHistoryActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AGenUIPlayground.NoActionBar">
@@ -31,6 +31,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".A2UIPlaygroundActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AGenUIPlayground.NoActionBar" />
         <activity
             android:name=".PortraitCaptureActivity"
             android:screenOrientation="portrait"
