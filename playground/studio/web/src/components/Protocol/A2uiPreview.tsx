@@ -35,10 +35,12 @@ function nativeStyle(value: unknown): CSSProperties {
       result.WebkitBoxOrient = "vertical";
       result.WebkitLineClamp = value;
       result.overflow = "hidden";
-    } else if (key === "text-align" && value === "trailing") {
-      result.textAlign = "right";
-    } else if (key === "text-align" && value === "leading") {
-      result.textAlign = "left";
+    } else if (key === "text-align") {
+      // Composite A2UI values (for example, "center top") are handled by
+      // textAlignmentStyle. Applying them directly produces invalid CSS.
+      if (value === "trailing") result.textAlign = "right";
+      else if (value === "leading") result.textAlign = "left";
+      else if (value === "left" || value === "center" || value === "right") result.textAlign = value;
     } else {
       result[styleKeys[key] ?? key] = value;
     }
@@ -66,12 +68,31 @@ export function imageObjectFit(value: unknown): CSSProperties["objectFit"] {
   }
 }
 
-function align(value: unknown) {
-  return value === "center" ? "center" : value === "trailing" || value === "end" ? "flex-end" : value === "start" || value === "leading" ? "flex-start" : "stretch";
+export function align(value: unknown): CSSProperties["alignItems"] {
+  if (value === "center") return "center";
+  if (value === "trailing" || value === "end") return "flex-end";
+  if (value === "start" || value === "leading") return "flex-start";
+  if (value === "baseline") return "baseline";
+  return "stretch";
 }
 
-function justify(value: unknown) {
-  return value === "spaceBetween" || value === "space-between" ? "space-between" : value === "center" ? "center" : value === "trailing" || value === "end" ? "flex-end" : value === "start" || value === "leading" ? "flex-start" : "flex-start";
+export function justify(value: unknown): CSSProperties["justifyContent"] {
+  if (value === "spaceBetween" || value === "space-between") return "space-between";
+  if (value === "spaceAround" || value === "space-around") return "space-around";
+  if (value === "spaceEvenly" || value === "space-evenly") return "space-evenly";
+  if (value === "center") return "center";
+  if (value === "trailing" || value === "end") return "flex-end";
+  return "flex-start";
+}
+
+export function textAlignmentStyle(value: unknown): Pick<CSSProperties, "display" | "flexDirection" | "justifyContent" | "textAlign"> {
+  const [horizontal = "left", vertical = "top"] = typeof value === "string" ? value.split(" ") : [];
+  return {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: vertical === "center" ? "center" : vertical === "bottom" ? "flex-end" : "flex-start",
+    textAlign: horizontal === "center" ? "center" : horizontal === "right" ? "right" : "left",
+  };
 }
 
 const iconPaths: Record<string, ReactNode> = {
@@ -147,7 +168,7 @@ function NativeComponent({ context, buildChild }: { context: ComponentContext; b
     }
     return children.map((id) => buildChild(id));
   };
-  if (type === "Text") return <div {...componentIdAttr} style={{ whiteSpace: "pre-wrap", ...style }}>{String(text(props.text) ?? "")}</div>;
+  if (type === "Text") return <div {...componentIdAttr} style={{ whiteSpace: "pre-wrap", ...textAlignmentStyle(props.styles && typeof props.styles === "object" ? (props.styles as Record<string, unknown>)["text-align"] : undefined), ...style }}>{String(text(props.text) ?? "")}</div>;
   if (type === "Icon") {
     const name = String(props.name ?? props.icon ?? "");
     const icon = previewIcon(name);
@@ -160,7 +181,7 @@ function NativeComponent({ context, buildChild }: { context: ComponentContext; b
   if (type === "Button") return <button {...componentIdAttr} type="button" onClick={() => void context.dispatchAction(props.action)} style={{ cursor: "pointer", border: "none", ...style }}>{child ? buildChild(child) : String(text(props.label) ?? "")}</button>;
   if (type === "Card") return <section {...componentIdAttr} style={{ display: "block", overflow: "hidden", ...style }}>{child ? buildChild(child) : renderedChildren()}</section>;
   if (type === "List") {
-    return <div {...componentIdAttr} style={{ display: "flex", flexDirection: props.direction === "horizontal" ? "row" : "column", alignItems: "stretch", ...style }}>
+    return <div {...componentIdAttr} style={{ display: "flex", flexDirection: props.direction === "horizontal" ? "row" : "column", alignItems: align(props.align), justifyContent: justify(props.justify), ...style }}>
       {renderedChildren()}
     </div>;
   }
@@ -175,10 +196,16 @@ const extensionComponents = extensionTypes.map((name) => createBinderlessCompone
     if ((nativeTypes as readonly string[]).includes(name)) return <NativeComponent context={context as never} buildChild={buildChild} />;
     const props = context.componentModel.properties;
     const componentIdAttr = { "data-a2ui-component-id": context.componentModel.id } as const;
-    const text = ["url", "src", "text", "markdown", "html"].map((key) => props[key]).find((value): value is string => typeof value === "string");
+    const text = ["url", "src", "text", "markdown", "html"].map((key) => {
+      const value = props[key];
+      return value && typeof value === "object" && "path" in value ? context.dataContext.resolveDynamicValue(value as never) : value;
+    }).find((value): value is string => typeof value === "string");
     const children = Array.isArray(props.children) ? props.children.filter((id): id is string => typeof id === "string") : [];
     if (name === "Web" && text) return <iframe {...componentIdAttr} title="A2UI web content" src={text} sandbox="allow-forms allow-popups allow-scripts" className="h-36 w-full rounded border" />;
-    if (name === "RichText" && text) return <div {...componentIdAttr} dangerouslySetInnerHTML={{ __html: text }} />;
+    if (name === "RichText" && text) {
+      const styles = props.styles && typeof props.styles === "object" ? props.styles as Record<string, unknown> : {};
+      return <div {...componentIdAttr} style={{ whiteSpace: "pre-wrap", ...textAlignmentStyle(styles["text-align"]), ...nativeStyle(styles) }} dangerouslySetInnerHTML={{ __html: text }} />;
+    }
     if (name === "Markdown" && text) return <pre {...componentIdAttr} className="whitespace-pre-wrap font-sans">{text}</pre>;
     if (name === "Lottie" || name === "Chart") return <div {...componentIdAttr} className="rounded border border-dashed p-3 text-xs text-slate-500">{name}{text ? ": " + text : " preview"}</div>;
     if (name === "UnknownPreview") return <div {...componentIdAttr} className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">Unsupported component: {String(props.originalType ?? "unknown")} ({context.componentModel.id})</div>;
