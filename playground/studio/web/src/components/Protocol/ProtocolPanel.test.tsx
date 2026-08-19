@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProtocolPanel } from "./ProtocolPanel";
 
 vi.mock("./ProtocolEditor", () => ({
-  ProtocolEditor: ({ onHistoryChange, selectComponentId }: { onHistoryChange?: (history: { canUndo: boolean; canRedo: boolean }) => void; selectComponentId?: { id: string } | null }) => (
-    <button type="button" data-component-id={selectComponentId?.id} onClick={() => onHistoryChange?.({ canUndo: true, canRedo: false })}>Set undo history</button>
+  ProtocolEditor: ({ onHistoryChange, selectComponentId, onComponentSelection }: { onHistoryChange?: (history: { canUndo: boolean; canRedo: boolean }) => void; selectComponentId?: { id: string } | null; onComponentSelection?: (id: string | null) => void }) => (
+    <button type="button" data-component-id={selectComponentId?.id} onClick={() => { onHistoryChange?.({ canUndo: true, canRedo: false }); onComponentSelection?.("headline"); }}>Set undo history</button>
   ),
 }));
 
@@ -12,7 +12,7 @@ vi.mock("./SaveBar", () => ({ SaveBar: () => null }));
 
 afterEach(cleanup);
 
-function renderPanel(streaming = false, selectComponentId?: { id: string; seq: number } | null) {
+function renderPanel(streaming = false, selectComponentId?: { id: string; seq: number } | null, onComponentSelection?: (id: string | null) => void) {
   return render(
     <ProtocolPanel
       componentsText="{}"
@@ -23,6 +23,7 @@ function renderPanel(streaming = false, selectComponentId?: { id: string; seq: n
       streaming={streaming}
       protocolId={null}
       selectComponentId={selectComponentId}
+      onComponentSelection={onComponentSelection}
       onSave={async () => undefined}
     />,
   );
@@ -55,5 +56,16 @@ describe("ProtocolPanel history controls", () => {
     renderPanel(false, { id: "headline", seq: 1 });
 
     expect(screen.getAllByRole("button", { name: "Set undo history" })[0].getAttribute("data-component-id")).toBe("headline");
+  });
+
+  it("forwards selection changes only from the components editor", () => {
+    const onComponentSelection = vi.fn();
+    renderPanel(false, undefined, onComponentSelection);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Set undo history" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Set undo history" })[1]);
+
+    expect(onComponentSelection).toHaveBeenCalledTimes(1);
+    expect(onComponentSelection).toHaveBeenCalledWith("headline");
   });
 });

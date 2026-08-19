@@ -23,6 +23,7 @@ interface ProtocolPanelProps {
   streaming: boolean;
   protocolId: string | null;
   selectComponentId?: { id: string; seq: number } | null;
+  onComponentSelection?: (id: string | null) => void;
   onSave: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
 }
 
@@ -35,6 +36,7 @@ export function ProtocolPanel({
   streaming,
   protocolId,
   selectComponentId,
+  onComponentSelection,
   onSave,
 }: ProtocolPanelProps) {
   const [tab, setTab] = useState<Tab>("components");
@@ -153,6 +155,7 @@ export function ProtocolPanel({
                 historyState={historyStatesRef.current[editorScope]?.components}
                 onHistoryStateChange={(state) => { historyStatesRef.current[editorScope] = { ...historyStatesRef.current[editorScope], components: state }; }}
                 selectComponentId={selectComponentId}
+                onComponentSelection={onComponentSelection}
               />
             </div>
             <div className={cn("h-full", tab !== "datamodel" && "hidden")}>

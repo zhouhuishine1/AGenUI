@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { ImageOffIcon, XIcon } from "@/components/icons";
 import { A2uiPreview } from "./A2uiPreview";
+import { VisualEditorToolbar } from "./VisualEditorToolbar";
 import type { A2uiPayload } from "@/types";
 
 interface PreviewScanStripProps {
@@ -18,10 +19,11 @@ interface PreviewScanStripProps {
   /** Called with the component id when the user clicks a preview element. */
   onSelectComponent?: (id: string | null) => void;
   selectedComponentId?: string;
+  onComponentsChange?: (componentsText: string) => void;
   onParseErrorChange?: (error: string | null) => void;
 }
 
-export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datamodelText, onSelectComponent, selectedComponentId, onParseErrorChange }: PreviewScanStripProps) {
+export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datamodelText, onSelectComponent, selectedComponentId, onComponentsChange, onParseErrorChange }: PreviewScanStripProps) {
   const [lightbox, setLightbox] = useState(false);
   const [preview, setPreview] = useState<{ components: A2uiPayload; datamodel: A2uiPayload | null } | null>(null);
   const [referenceSize, setReferenceSize] = useState<{ width: number; height: number } | null>(null);
@@ -72,9 +74,10 @@ export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datam
 
   return (
     <div className="h-full min-h-0 border-b border-slate-200 bg-white p-2.5">
-      <div className="relative h-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
+      <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
+          {preview && onComponentsChange && <VisualEditorToolbar components={preview.components} selectedComponentId={selectedComponentId} onChange={(next) => onComponentsChange(JSON.stringify(next, null, 2))} />}
           {preview ? (
-            <A2uiPreview components={preview.components} datamodel={preview.datamodel} referenceSize={referenceSize} fit="contain" onAction={(payload) => setAction(JSON.stringify(payload))} onSelectComponent={onSelectComponent} selectedComponentId={selectedComponentId} />
+            <div className="min-h-0 flex-1"><A2uiPreview components={preview.components} datamodel={preview.datamodel} referenceSize={referenceSize} fit="contain" onAction={(payload) => setAction(JSON.stringify(payload))} onSelectComponent={onSelectComponent} selectedComponentId={selectedComponentId} /></div>
           ) : renderingUrl ? (
               <button
                 type="button"

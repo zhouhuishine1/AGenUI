@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { align, imageObjectFit, justify, previewIcon, resolveImageSource, textAlignmentStyle } from "./A2uiPreview";
+import { align, downloadImageSource, imageObjectFit, justify, previewIcon, resolveImageSource, textAlignmentStyle } from "./A2uiPreview";
+import { vi } from "vitest";
 
 describe("Image preview helpers", () => {
   const remoteUrl = "https://images.example.test/wide.jpg";
@@ -38,5 +39,22 @@ describe("Image preview helpers", () => {
     expect(justify("spaceAround")).toBe("space-around");
     expect(justify("spaceBetween")).toBe("space-between");
     expect(justify("spaceEvenly")).toBe("space-evenly");
+  });
+
+  it("downloads an image and returns an object URL", async () => {
+    const blob = new Blob(["image"], { type: "image/png" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(blob) }));
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:image"), revokeObjectURL: vi.fn() });
+
+    await expect(downloadImageSource("https://images.example.test/a.png")).resolves.toBe("blob:image");
+    expect(fetch).toHaveBeenCalledWith("https://images.example.test/a.png", { signal: undefined });
+  });
+
+  it("rejects failed and non-image downloads while preserving inline sources", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["no"], { type: "text/plain" })) }));
+    await expect(downloadImageSource("https://images.example.test/not-image")).rejects.toThrow("not an image");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    await expect(downloadImageSource("https://images.example.test/missing")).rejects.toThrow("404");
+    await expect(downloadImageSource("data:image/png;base64,abc")).resolves.toBe("data:image/png;base64,abc");
   });
 });

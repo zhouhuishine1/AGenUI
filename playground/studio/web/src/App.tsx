@@ -26,7 +26,7 @@ import type { A2uiPayload, ImageAttachment, RoundSnapshot } from "@/types";
 import type { ChatMessage } from "@/api/sse";
 
 type SplitRatios = [number, number, number];
-type ComponentSelection = { id: string; seq: number };
+type ComponentSelection = { id: string; seq: number; source: "preview" | "editor" };
 
 const DEFAULT_SPLIT_RATIOS: SplitRatios = [1 / 3, 1 / 2, 1 / 2];
 const MIN_SPLIT_RATIO = 0.15;
@@ -524,7 +524,14 @@ export default function App() {
   }, []);
 
   const handleSelectComponent = useCallback((id: string) => {
-    setComponentSelection((current) => ({ id, seq: (current?.seq ?? 0) + 1 }));
+    setComponentSelection((current) => ({ id, seq: (current?.seq ?? 0) + 1, source: "preview" }));
+  }, []);
+
+  const handleEditorComponentSelection = useCallback((id: string | null) => {
+    setComponentSelection((current) => {
+      if (!id) return null;
+      return current?.id === id && current.source === "editor" ? current : { id, seq: (current?.seq ?? 0) + 1, source: "editor" };
+    });
   }, []);
 
   const clearComponentSelection = useCallback(() => setComponentSelection(null), []);
@@ -609,7 +616,7 @@ export default function App() {
 
         {rightPanelsOpen && <div ref={rightPanelsRef} className={`studio-right-panels min-h-0 min-w-0${isNarrowLayout ? " studio-right-panels--overlay" : ""}`} style={{ gridTemplateRows: `minmax(0, ${splitRatios[1]}fr) 8px minmax(0, ${splitRatios[2]}fr)` }}>
           <div className="studio-panel min-w-0">
-          <PreviewScanStrip presetId={panel.presetId} renderingUrl={renderingUrl} componentsText={panel.componentsText} datamodelText={panel.datamodelText} selectedComponentId={componentSelection?.id} onSelectComponent={(id) => id ? handleSelectComponent(id) : clearComponentSelection()} />
+          <PreviewScanStrip presetId={panel.presetId} renderingUrl={renderingUrl} componentsText={panel.componentsText} datamodelText={panel.datamodelText} selectedComponentId={componentSelection?.id} onSelectComponent={(id) => id ? handleSelectComponent(id) : clearComponentSelection()} onComponentsChange={(componentsText) => setPanel((current) => ({ ...current, componentsText }))} />
           </div>
           <button type="button" aria-label="Resize preview and JSON panels" className="studio-divider studio-divider--horizontal" onPointerDown={(event) => handleDividerPointerDown(1, event)} onPointerMove={handleDividerPointerMove} onPointerUp={handleDividerPointerUp} onPointerCancel={handleDividerPointerUp} />
 
@@ -623,7 +630,8 @@ export default function App() {
             editorScope={sessionId ? `session:${sessionId}` : selection?.kind ?? "empty"}
             streaming={selectedSessionGenerating && panelAttachedRef.current}
             protocolId={panel.protocolId}
-            selectComponentId={componentSelection}
+            selectComponentId={componentSelection?.source === "preview" ? componentSelection : null}
+            onComponentSelection={handleEditorComponentSelection}
             onSave={handleSave}
           />
           </div>

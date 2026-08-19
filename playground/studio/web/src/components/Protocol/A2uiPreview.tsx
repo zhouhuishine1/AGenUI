@@ -68,6 +68,15 @@ export function imageObjectFit(value: unknown): CSSProperties["objectFit"] {
   }
 }
 
+export async function downloadImageSource(source: string, signal?: AbortSignal): Promise<string> {
+  if (!source || source.startsWith("data:") || source.startsWith("blob:")) return source;
+  const response = await fetch(source, { signal });
+  if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
+  const blob = await response.blob();
+  if (!blob.type.startsWith("image/")) throw new Error("Downloaded resource is not an image");
+  return URL.createObjectURL(blob);
+}
+
 export function align(value: unknown): CSSProperties["alignItems"] {
   if (value === "center") return "center";
   if (value === "trailing" || value === "end") return "flex-end";
@@ -176,7 +185,7 @@ function NativeComponent({ context, buildChild }: { context: ComponentContext; b
     return icon ? <svg {...componentIdAttr} aria-label={name} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0, color: style.color, ...style }}>{icon}</svg>
       : <span {...componentIdAttr} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}>{name}</span>;
   }
-  if (type === "Image") return <img {...componentIdAttr} src={resolveImageSource(props.url ?? props.src, context.dataContext.resolveDynamicValue.bind(context.dataContext))} alt={String(text(props.description) ?? "")} style={{ display: "block", objectFit: imageObjectFit(props.fit), ...style }} />;
+  if (type === "Image") return <PreviewImage context={context} componentIdAttr={componentIdAttr} style={style} text={text} />;
   if (type === "Divider") return <div {...componentIdAttr} style={{ width: "100%", height: 1, backgroundColor: "#d7e2ea", ...style }} />;
   if (type === "Button") return <button {...componentIdAttr} type="button" onClick={() => void context.dispatchAction(props.action)} style={{ cursor: "pointer", border: "none", ...style }}>{child ? buildChild(child) : String(text(props.label) ?? "")}</button>;
   if (type === "Card") return <section {...componentIdAttr} style={{ display: "block", overflow: "hidden", ...style }}>{child ? buildChild(child) : renderedChildren()}</section>;
@@ -188,6 +197,42 @@ function NativeComponent({ context, buildChild }: { context: ComponentContext; b
   if (type === "Tabs") return <AndroidTabsPreview context={context} buildChild={buildChild} componentIdAttr={componentIdAttr} style={style} />;
   const isRow = type === "Row";
   return <div {...componentIdAttr} style={{ display: "flex", flexDirection: isRow ? "row" : "column", alignItems: align(props.align), justifyContent: justify(props.justify), ...style }}>{renderedChildren()}</div>;
+}
+
+function PreviewImage({ context, componentIdAttr, style, text }: { context: ComponentContext; componentIdAttr: { "data-a2ui-component-id": string }; style: CSSProperties; text: (value: unknown) => unknown }) {
+  const props = context.componentModel.properties;
+  const source = resolveImageSource(props.url ?? props.src, context.dataContext.resolveDynamicValue.bind(context.dataContext));
+  const [renderedSource, setRenderedSource] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!source) {
+      setRenderedSource("");
+      setFailed(false);
+      return;
+    }
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    setRenderedSource("");
+    setFailed(false);
+    downloadImageSource(source, controller.signal).then((nextSource) => {
+      if (controller.signal.aborted) {
+        if (nextSource.startsWith("blob:")) URL.revokeObjectURL(nextSource);
+        return;
+      }
+      objectUrl = nextSource.startsWith("blob:") ? nextSource : null;
+      setRenderedSource(nextSource);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        setFailed(true);
+        console.warn("A2UI image preview failed to load", error);
+      }
+    });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [source]);
+  return <img {...componentIdAttr} src={renderedSource} alt={String(text(props.description) ?? "")} aria-busy={!renderedSource && !failed && Boolean(source)} data-image-load-failed={failed || undefined} style={{ display: "block", objectFit: imageObjectFit(props.fit), ...style }} />;
 }
 
 const extensionComponents = extensionTypes.map((name) => createBinderlessComponentImplementation(
