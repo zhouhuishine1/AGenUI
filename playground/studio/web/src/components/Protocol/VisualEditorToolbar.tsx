@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { A2uiPayload } from "@/types";
 
 type ComponentRecord = Record<string, unknown>;
@@ -12,7 +13,6 @@ interface Props {
 }
 
 const TEXT_COMPONENTS = new Set(["Text", "RichText"]);
-const LAYOUT_COMPONENTS = new Set(["Row", "Column", "List"]);
 const FIT_OPTIONS = [
   ["contain", "完整显示"],
   ["cover", "裁切填满"],
@@ -116,8 +116,10 @@ function SizePanel({ styles, onChange }: { styles: Record<string, unknown>; onCh
 export function VisualEditorToolbar({ components, selectedComponentId, onChange }: Props) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState<number>(Infinity);
   const [openMenu, setOpenMenu] = useState<"margin" | "size" | "horizontal" | "vertical" | "fit" | "overflow" | null>(null);
+  const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
   const records = useMemo(() => componentsArray(components), [components]);
   const selected = records?.find((component) => component.id === selectedComponentId) ?? null;
   const type = typeof selected?.component === "string" ? selected.component : "root";
@@ -199,10 +201,26 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
   useEffect(() => {
     if (!openMenu) return;
     const closeOnOutside = (event: PointerEvent) => {
-      if (!toolbarRef.current?.contains(event.target as Node)) setOpenMenu(null);
+      const target = event.target as Node;
+      if (!toolbarRef.current?.contains(target) && !popupRef.current?.contains(target)) setOpenMenu(null);
     };
     document.addEventListener("pointerdown", closeOnOutside);
     return () => document.removeEventListener("pointerdown", closeOnOutside);
+  }, [openMenu]);
+  useLayoutEffect(() => {
+    if (!openMenu) return;
+    const updatePosition = () => {
+      const rect = toolbarRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPopupPosition({ left: Math.max(8, rect.left + 6), top: rect.bottom + 4 });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [openMenu]);
 
   const marginInput = (box: "margin" | "padding", side: "top" | "right" | "bottom" | "left") => <label className="flex w-[118px] items-center gap-1.5 text-[11px] text-slate-500"><span className="w-3">{{ top: "上", right: "右", bottom: "下", left: "左" }[side]}</span><span className="flex min-w-0 flex-1 items-center rounded border border-slate-200 bg-white focus-within:border-brand-400"><input aria-label={`${box === "margin" ? "外边距" : "内边距"}${side}`} inputMode="numeric" pattern="[0-9]*" defaultValue={splitBox(styles, box, side)} placeholder="0" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} onBlur={(event) => { if (/^\d+$/.test(event.target.value)) { const currentStyles = (selected?.styles && typeof selected.styles === "object" ? selected.styles : {}) as Record<string, unknown>; mutate(targetId, (component) => ({ ...component, styles: updateBox(currentStyles, box, side, `${event.target.value}px`) })); } }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-xs text-slate-700 outline-none" /><span className="pr-2 text-[10px] text-slate-400">px</span></span></label>;
@@ -217,10 +235,16 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
   const overflow = tools.slice(visibleCount);
 
   const toolButton = (tool: typeof tools[number]) => <button type="button" key={tool.id} onClick={() => setOpenMenu((current) => current && current !== tool.id ? null : current === tool.id ? null : tool.id as typeof openMenu)} className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium transition ${openMenu === tool.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>{tool.icon}<span>{tool.label}</span></button>;
-  return <div ref={toolbarRef} className="relative flex min-h-10 shrink-0 items-center border-b border-slate-200 bg-white px-1.5 shadow-sm">
+  const popupLayer = openMenu && typeof document !== "undefined" ? createPortal(
+    <div ref={popupRef} className="fixed z-50 rounded-lg border border-slate-200 bg-white shadow-lg" style={popupPosition}>
+      {openMenu === "overflow" ? <div className="flex gap-1 p-1.5">{overflow.map(toolButton)}</div> : popup}
+    </div>,
+    document.body,
+  ) : null;
+
+  return <><div ref={toolbarRef} className="relative flex min-h-10 shrink-0 items-center border-b border-slate-200 bg-white px-1.5 shadow-sm">
     <div ref={toolsRef} aria-hidden="true" className="invisible absolute flex gap-1">{tools.map(toolButton)}</div>
     <div className="flex min-w-0 gap-1 overflow-hidden">{visible.map(toolButton)}</div>
     {overflow.length > 0 && <button type="button" aria-label="更多编辑工具" onClick={() => setOpenMenu((current) => current && current !== "overflow" ? null : current === "overflow" ? null : "overflow")} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"><MoreIcon /><span>更多</span></button>}
-    {openMenu && <div className="absolute left-1.5 top-full z-30 mt-1 rounded-lg border border-slate-200 bg-white shadow-lg">{openMenu === "overflow" ? <div className="flex gap-1 p-1.5">{overflow.map(toolButton)}</div> : popup}</div>}
-  </div>;
+  </div>{popupLayer}</>;
 }

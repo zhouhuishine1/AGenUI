@@ -37,6 +37,16 @@ describe("VisualEditorToolbar", () => {
     expect(screen.queryByLabelText("边距调节")).toBeNull();
   });
 
+  it("renders the popup menu in the document layer instead of the clipped toolbar", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello" })} selectedComponentId="text" onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "边距" }));
+    const panel = screen.getByLabelText("边距调节");
+    expect(panel.parentElement?.classList.contains("fixed")).toBe(true);
+    expect(panel.parentElement?.parentElement).toBe(document.body);
+  });
+
   it("creates a root component when editing the unselected outer layer", () => {
     const onChange = vi.fn();
     render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello" })} onChange={onChange} />);
