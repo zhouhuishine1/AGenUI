@@ -7,9 +7,10 @@ import { copyText } from "@/lib/utils";
 
 interface QrCodeCardProps {
   url: string;
+  lanAddress?: string;
 }
 
-export function QrCodeCard({ url }: QrCodeCardProps) {
+export function QrCodeCard({ url, lanAddress }: QrCodeCardProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -21,6 +22,7 @@ export function QrCodeCard({ url }: QrCodeCardProps) {
 
   return (
     <div className="flex w-[172px] shrink-0 flex-col items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
+      {lanAddress && <p className="text-center text-[10px] font-medium text-slate-500">LAN {lanAddress}</p>}
       <div className="rounded-md border border-slate-100 bg-white p-1.5 shadow-sm">
         <QRCodeSVG value={url} size={152} level="M" />
       </div>

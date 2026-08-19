@@ -1,16 +1,33 @@
 /** Top bar: sidebar toggle, brand, LAN address hint. */
 
-import { DownloadIcon, MenuIcon } from "@/components/icons";
+import { useEffect, useRef, useState } from "react";
+import { DownloadIcon, MenuIcon, QrIcon } from "@/components/icons";
 import mainpageIcon from "@/assets/mainpage_icon.png";
+import { QrCodeCard } from "@/components/Protocol/QrCodeCard";
 import type { ServerInfo } from "@/types";
 
 interface HeaderProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   serverInfo: ServerInfo | null;
+  qrUrl: string | null;
 }
 
-export function Header({ sidebarOpen, onToggleSidebar, serverInfo }: HeaderProps) {
+export function Header({ sidebarOpen, onToggleSidebar, serverInfo, qrUrl }: HeaderProps) {
+  const [scanOpen, setScanOpen] = useState(false);
+  const scanMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!scanOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!scanMenuRef.current?.contains(event.target as Node)) setScanOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [scanOpen]);
+
+  const lanAddress = serverInfo?.base_url.replace(/^https?:\/\//, "");
+
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3">
       <button
@@ -51,13 +68,24 @@ export function Header({ sidebarOpen, onToggleSidebar, serverInfo }: HeaderProps
           Download Playground
         </a>
         {serverInfo && (
-          <span
-            className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500 sm:flex"
-            title="Mobile devices must be on the same LAN to scan the QR code"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            LAN {serverInfo.base_url.replace(/^https?:\/\//, "")}
-          </span>
+          <div ref={scanMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setScanOpen((open) => !open)}
+              aria-expanded={scanOpen}
+              aria-haspopup="dialog"
+              className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white"
+              title="Scan protocol with AGenUI Playground"
+            >
+              <QrIcon size={13} className="text-brand-500" />
+              Scan and Preview
+            </button>
+            {scanOpen && (
+              <div role="dialog" aria-label="Scan and Preview" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                <QrCodeCard url={qrUrl ?? serverInfo.base_url} lanAddress={lanAddress} />
+              </div>
+            )}
+          </div>
         )}
       </div>
     </header>

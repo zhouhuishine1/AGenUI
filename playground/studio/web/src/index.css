@@ -55,3 +55,92 @@ body {
 .thinking-dot {
   animation: thinking-bounce 1.2s infinite ease-in-out;
 }
+
+.studio-workspace {
+  position: relative;
+  display: grid;
+}
+
+.studio-panel {
+  min-height: 0;
+}
+
+.studio-right-panels {
+  display: grid;
+}
+
+.studio-divider {
+  position: relative;
+  z-index: 10;
+  border: 0;
+  border-left: 1px solid rgb(226 232 240);
+  background: rgb(248 250 252);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.studio-divider:hover,
+.studio-divider:focus-visible {
+  background: rgb(238 244 255);
+  outline: none;
+}
+
+.studio-divider--horizontal {
+  border-left: 0;
+  border-top: 1px solid rgb(226 232 240);
+  cursor: row-resize;
+}
+
+.studio-collapse-control {
+  position: absolute;
+  top: 8px;
+  left: -30px;
+  z-index: 20;
+  display: flex;
+  height: 24px;
+  width: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 4px;
+  background: white;
+  color: rgb(100 116 139);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.studio-collapse-control:hover {
+  border-color: rgb(79 110 247);
+  color: rgb(59 91 219);
+}
+
+.studio-collapse-control--collapsed {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  left: auto;
+  transform: rotate(180deg);
+}
+
+@media (max-width: 900px) {
+  .studio-workspace,
+  .studio-right-panels {
+    min-width: 0;
+  }
+
+  .studio-right-panels--overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    background: white;
+    box-shadow: -8px 0 24px rgb(15 23 42 / 0.18);
+  }
+
+  .studio-right-panels--overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: white;
+  }
+}
