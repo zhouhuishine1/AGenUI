@@ -5,7 +5,7 @@ import { z } from "zod";
 import { buildPreviewProtocol } from "@/lib/previewProtocol";
 import type { A2uiPayload } from "@/types";
 
-interface Props { components: A2uiPayload; datamodel: A2uiPayload | null; onAction: (action: unknown) => void; referenceSize?: { width: number; height: number } | null; fit?: "contain" | "width"; /** Called with the component id when the user clicks a rendered element. */ onSelectComponent?: (id: string) => void; selectedComponentId?: string; }
+interface Props { components: A2uiPayload; datamodel: A2uiPayload | null; onAction: (action: unknown) => void; referenceSize?: { width: number; height: number } | null; fit?: "contain" | "width"; /** Called with the component id, or null when the preview background is clicked. */ onSelectComponent?: (id: string | null) => void; selectedComponentId?: string; }
 
 const extensionSchema = z.object({}).passthrough();
 const nativeTypes = ["Text", "Icon", "Image", "Button", "Card", "Row", "Column", "List", "Divider", "Tabs"] as const;
@@ -249,7 +249,7 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     const target = event.target as HTMLElement;
     const element = target.closest<HTMLElement>("[data-a2ui-component-id]");
     const id = element?.dataset.a2uiComponentId;
-    if (id) onSelectComponent(id);
+    onSelectComponent(id ?? null);
   };
   const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;

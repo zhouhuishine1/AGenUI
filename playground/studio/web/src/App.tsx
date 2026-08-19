@@ -527,6 +527,16 @@ export default function App() {
     setComponentSelection((current) => ({ id, seq: (current?.seq ?? 0) + 1 }));
   }, []);
 
+  const clearComponentSelection = useCallback(() => setComponentSelection(null), []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") clearComponentSelection();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [clearComponentSelection]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Header
@@ -599,7 +609,7 @@ export default function App() {
 
         {rightPanelsOpen && <div ref={rightPanelsRef} className={`studio-right-panels min-h-0 min-w-0${isNarrowLayout ? " studio-right-panels--overlay" : ""}`} style={{ gridTemplateRows: `minmax(0, ${splitRatios[1]}fr) 8px minmax(0, ${splitRatios[2]}fr)` }}>
           <div className="studio-panel min-w-0">
-          <PreviewScanStrip presetId={panel.presetId} renderingUrl={renderingUrl} componentsText={panel.componentsText} datamodelText={panel.datamodelText} selectedComponentId={componentSelection?.id} onSelectComponent={handleSelectComponent} />
+          <PreviewScanStrip presetId={panel.presetId} renderingUrl={renderingUrl} componentsText={panel.componentsText} datamodelText={panel.datamodelText} selectedComponentId={componentSelection?.id} onSelectComponent={(id) => id ? handleSelectComponent(id) : clearComponentSelection()} />
           </div>
           <button type="button" aria-label="Resize preview and JSON panels" className="studio-divider studio-divider--horizontal" onPointerDown={(event) => handleDividerPointerDown(1, event)} onPointerMove={handleDividerPointerMove} onPointerUp={handleDividerPointerUp} onPointerCancel={handleDividerPointerUp} />
 

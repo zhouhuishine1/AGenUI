@@ -16,7 +16,7 @@ interface PreviewScanStripProps {
   componentsText: string;
   datamodelText: string;
   /** Called with the component id when the user clicks a preview element. */
-  onSelectComponent?: (id: string) => void;
+  onSelectComponent?: (id: string | null) => void;
   selectedComponentId?: string;
   onParseErrorChange?: (error: string | null) => void;
 }
