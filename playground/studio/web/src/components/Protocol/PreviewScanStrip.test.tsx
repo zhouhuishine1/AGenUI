@@ -10,7 +10,6 @@ describe("PreviewScanStrip", () => {
       <PreviewScanStrip
         presetId={null}
         renderingUrl={null}
-        qrUrl={null}
         componentsText="{}"
         datamodelText=""
       />,

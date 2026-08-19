@@ -3,20 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProtocolPanel } from "./ProtocolPanel";
 
 vi.mock("./ProtocolEditor", () => ({
-  ProtocolEditor: ({ onHistoryChange }: { onHistoryChange?: (history: { canUndo: boolean; canRedo: boolean }) => void }) => (
-    <button type="button" onClick={() => onHistoryChange?.({ canUndo: true, canRedo: false })}>Set undo history</button>
+  ProtocolEditor: ({ onHistoryChange, selectComponentId }: { onHistoryChange?: (history: { canUndo: boolean; canRedo: boolean }) => void; selectComponentId?: { id: string } | null }) => (
+    <button type="button" data-component-id={selectComponentId?.id} onClick={() => onHistoryChange?.({ canUndo: true, canRedo: false })}>Set undo history</button>
   ),
 }));
 
-vi.mock("./PreviewScanStrip", () => ({ PreviewScanStrip: () => null }));
 vi.mock("./SaveBar", () => ({ SaveBar: () => null }));
 
 afterEach(cleanup);
 
-function renderPanel(streaming = false) {
+function renderPanel(streaming = false, selectComponentId?: { id: string; seq: number } | null) {
   return render(
     <ProtocolPanel
-      title="New Session"
       componentsText="{}"
       datamodelText=""
       onComponentsChange={() => undefined}
@@ -24,13 +22,8 @@ function renderPanel(streaming = false) {
       editorScope="session:test"
       streaming={streaming}
       protocolId={null}
-      presetId={null}
-      renderingUrl={null}
-      qrUrl={null}
+      selectComponentId={selectComponentId}
       onSave={async () => undefined}
-      editableTitle={false}
-      onTitleChange={async () => undefined}
-      onTitleError={() => undefined}
     />,
   );
 }
@@ -56,5 +49,11 @@ describe("ProtocolPanel history controls", () => {
 
     expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("forwards preview selection to the components editor", () => {
+    renderPanel(false, { id: "headline", seq: 1 });
+
+    expect(screen.getAllByRole("button", { name: "Set undo history" })[0].getAttribute("data-component-id")).toBe("headline");
   });
 });

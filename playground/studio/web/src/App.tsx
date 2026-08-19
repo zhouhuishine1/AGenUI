@@ -6,7 +6,9 @@ import { Header } from "@/components/Header";
 import { InputBar } from "@/components/InputBar/InputBar";
 import { ConfigModal } from "@/components/InputBar/ConfigModal";
 import { ProtocolPanel } from "@/components/Protocol/ProtocolPanel";
+import { PreviewScanStrip } from "@/components/Protocol/PreviewScanStrip";
 import { PresetSidebar, type Selection } from "@/components/Sidebar/PresetSidebar";
+import { ChevronRightIcon } from "@/components/icons";
 import { useGeneration } from "@/hooks/useGeneration";
 import { useLibrary } from "@/hooks/useLibrary";
 import { useProviders } from "@/hooks/useProviders";
@@ -22,6 +24,28 @@ import {
 } from "@/api/client";
 import type { A2uiPayload, ImageAttachment, RoundSnapshot } from "@/types";
 import type { ChatMessage } from "@/api/sse";
+
+type SplitRatios = [number, number, number];
+type ComponentSelection = { id: string; seq: number };
+
+const DEFAULT_SPLIT_RATIOS: SplitRatios = [1 / 3, 1 / 2, 1 / 2];
+const MIN_SPLIT_RATIO = 0.15;
+const GLOBAL_LAYOUT_STORAGE_KEY = "agenui-studio-workspace-layout";
+
+function normalizedSplitRatios(ratios: readonly number[] | undefined): SplitRatios {
+  if (!ratios || ratios.length !== 3 || ratios.some((ratio) => !Number.isFinite(ratio) || ratio <= 0)) return DEFAULT_SPLIT_RATIOS;
+  const verticalTotal = ratios[1] + ratios[2];
+  return [ratios[0], ratios[1] / verticalTotal, ratios[2] / verticalTotal];
+}
+
+function loadGlobalLayout(): { splitRatios: SplitRatios; rightPanelsOpen: boolean } {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(GLOBAL_LAYOUT_STORAGE_KEY) ?? "{}") as { splitRatios?: number[]; rightPanelsOpen?: boolean };
+    return { splitRatios: normalizedSplitRatios(stored.splitRatios), rightPanelsOpen: stored.rightPanelsOpen ?? true };
+  } catch {
+    return { splitRatios: DEFAULT_SPLIT_RATIOS, rightPanelsOpen: true };
+  }
+}
 
 interface PanelState {
   title: string;
@@ -66,6 +90,11 @@ export default function App() {
   const [sessionProvider, setSessionProvider] = useState<string | null | undefined>(undefined);
   const [sessionReasoning, setSessionReasoning] = useState<boolean | undefined>(undefined);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [globalLayout] = useState(loadGlobalLayout);
+  const [splitRatios, setSplitRatios] = useState<SplitRatios>(globalLayout.splitRatios);
+  const [rightPanelsOpen, setRightPanelsOpen] = useState(globalLayout.rightPanelsOpen);
+  const [isNarrowLayout, setIsNarrowLayout] = useState(() => window.matchMedia("(max-width: 900px)").matches);
+  const [componentSelection, setComponentSelection] = useState<ComponentSelection | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const liveImagesRef = useRef<ImageAttachment[]>([]);
   const finalizedProtocolRef = useRef<string | null>(null);
@@ -79,12 +108,35 @@ export default function App() {
    * correct session instead of polluting the one currently on screen. */
   const generationContextRef = useRef<{ sessionId: string; conversation: RoundSnapshot[] } | null>(null);
   const archivedGenerationRef = useRef<string | null>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const rightPanelsRef = useRef<HTMLDivElement>(null);
+  const splitRatiosRef = useRef<SplitRatios>(DEFAULT_SPLIT_RATIOS);
+  const resizeRef = useRef<{ divider: 0 | 1; startPosition: number; ratios: SplitRatios } | null>(null);
 
   // Whether the right panel currently mirrors the live generation stream.
   // It is re-attached whenever a new round starts and detached as soon as the
   // user explicitly selects a preset/protocol, so incoming stream chunks no
   // longer clobber the content the user chose to look at.
   const panelAttachedRef = useRef(false);
+
+  useEffect(() => {
+    splitRatiosRef.current = splitRatios;
+  }, [splitRatios]);
+
+  useEffect(() => {
+    window.localStorage.setItem(GLOBAL_LAYOUT_STORAGE_KEY, JSON.stringify({ splitRatios, rightPanelsOpen }));
+  }, [splitRatios, rightPanelsOpen]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 900px)");
+    const collapseOnNarrow = (event: MediaQueryList | MediaQueryListEvent) => {
+      setIsNarrowLayout(event.matches);
+      setRightPanelsOpen(!event.matches);
+    };
+    collapseOnNarrow(media);
+    media.addEventListener("change", collapseOnNarrow);
+    return () => media.removeEventListener("change", collapseOnNarrow);
+  }, []);
 
   // --- Sync editor panel while streaming ---
   // Only mirrors the stream while the panel is attached. Selection is managed
@@ -362,13 +414,6 @@ export default function App() {
     if (sessionIdRef.current) void updateSession(sessionIdRef.current, { draft: value }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save draft"));
   }, []);
 
-  const handleTitleChange = useCallback(async (title: string) => {
-    if (!sessionIdRef.current) return;
-    const session = await updateSession(sessionIdRef.current, { title });
-    setPanel((current) => ({ ...current, title: session.title }));
-    await library.refresh();
-  }, [library]);
-
   // --- Rename a session from the sidebar ⋮ menu ---
   const handleRenameSession = useCallback(async (id: string, title: string) => {
     const session = await updateSession(id, { title });
@@ -445,12 +490,50 @@ export default function App() {
   const liveGeneration = gen.isGenerating ? { prompt: gen.prompt } : null;
   const selectedSessionGenerating = gen.isGenerating && generationContextRef.current?.sessionId === sessionId;
 
+  const setSplitRatiosAndRemember = useCallback((ratios: SplitRatios) => {
+    splitRatiosRef.current = ratios;
+    setSplitRatios(ratios);
+  }, []);
+
+  const handleDividerPointerDown = useCallback((divider: 0 | 1, event: React.PointerEvent<HTMLElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = { divider, startPosition: divider === 0 ? event.clientX : event.clientY, ratios: splitRatiosRef.current };
+  }, []);
+
+  const handleDividerPointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const resize = resizeRef.current;
+    const dimension = resize?.divider === 0
+      ? workspaceRef.current?.getBoundingClientRect().width
+      : rightPanelsRef.current?.getBoundingClientRect().height;
+    if (!resize || !dimension) return;
+    const position = resize.divider === 0 ? event.clientX : event.clientY;
+    const delta = (position - resize.startPosition) / dimension;
+    const next = [...resize.ratios] as SplitRatios;
+    if (resize.divider === 0) {
+      next[0] = Math.min(1 - MIN_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, resize.ratios[0] + delta));
+    } else {
+      const pairTotal = 1;
+      next[1] = Math.min(pairTotal - MIN_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, resize.ratios[1] + delta));
+      next[2] = pairTotal - next[1];
+    }
+    setSplitRatiosAndRemember(next);
+  }, [setSplitRatiosAndRemember]);
+
+  const handleDividerPointerUp = useCallback(() => {
+    resizeRef.current = null;
+  }, []);
+
+  const handleSelectComponent = useCallback((id: string) => {
+    setComponentSelection((current) => ({ id, seq: (current?.seq ?? 0) + 1 }));
+  }, []);
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Header
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((o) => !o)}
         serverInfo={serverInfo}
+        qrUrl={qrUrl}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -471,8 +554,15 @@ export default function App() {
           />
         )}
 
+        <div
+          ref={workspaceRef}
+          className={`studio-workspace min-h-0 min-w-0 flex-1${selection?.kind === "preset" ? " studio-workspace--no-chat" : ""}${!rightPanelsOpen ? " studio-workspace--collapsed" : ""}${isNarrowLayout ? " studio-workspace--narrow" : ""}`}
+          style={{
+            gridTemplateColumns: isNarrowLayout || !rightPanelsOpen || selection?.kind === "preset" ? "minmax(0, 1fr)" : `minmax(0, ${splitRatios[0]}fr) 8px minmax(0, ${1 - splitRatios[0]}fr)`,
+          }}
+        >
         {/* Conversation column */}
-        {selection?.kind !== "preset" && <div className="flex min-w-[320px] flex-1 flex-col">
+        {selection?.kind !== "preset" && <div className="studio-panel flex min-w-0 flex-col">
           {sessionError && <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{sessionError}</div>}
           <ConversationPanel
             history={history}
@@ -503,10 +593,19 @@ export default function App() {
           />
         </div>}
 
-        {/* Protocol column (shares remaining space with the conversation) */}
-        <div className="flex min-w-[360px] flex-1 flex-col">
+        {rightPanelsOpen && !isNarrowLayout && selection?.kind !== "preset" && <div role="separator" aria-orientation="vertical" className="studio-divider studio-divider--vertical" onPointerDown={(event) => handleDividerPointerDown(0, event)} onPointerMove={handleDividerPointerMove} onPointerUp={handleDividerPointerUp} onPointerCancel={handleDividerPointerUp}>
+          <button type="button" aria-label="Hide preview and JSON panels" title="Hide preview and JSON panels" className="studio-collapse-control" onPointerDown={(event) => event.stopPropagation()} onClick={() => setRightPanelsOpen(false)}><ChevronRightIcon size={14} /></button>
+        </div>}
+
+        {rightPanelsOpen && <div ref={rightPanelsRef} className={`studio-right-panels min-h-0 min-w-0${isNarrowLayout ? " studio-right-panels--overlay" : ""}`} style={{ gridTemplateRows: `minmax(0, ${splitRatios[1]}fr) 8px minmax(0, ${splitRatios[2]}fr)` }}>
+          <div className="studio-panel min-w-0">
+          <PreviewScanStrip presetId={panel.presetId} renderingUrl={renderingUrl} componentsText={panel.componentsText} datamodelText={panel.datamodelText} selectedComponentId={componentSelection?.id} onSelectComponent={handleSelectComponent} />
+          </div>
+          <button type="button" aria-label="Resize preview and JSON panels" className="studio-divider studio-divider--horizontal" onPointerDown={(event) => handleDividerPointerDown(1, event)} onPointerMove={handleDividerPointerMove} onPointerUp={handleDividerPointerUp} onPointerCancel={handleDividerPointerUp} />
+
+          {/* Protocol column */}
+          <div className="studio-panel flex min-w-0 flex-col">
           <ProtocolPanel
-            title={panel.title}
             componentsText={panel.componentsText}
             datamodelText={panel.datamodelText}
             onComponentsChange={(v) => setPanel((p) => { if (sessionIdRef.current) editorDraftsRef.current[sessionIdRef.current] = { componentsText: v, datamodelText: p.datamodelText }; return { ...p, componentsText: v }; })}
@@ -514,15 +613,13 @@ export default function App() {
             editorScope={sessionId ? `session:${sessionId}` : selection?.kind ?? "empty"}
             streaming={selectedSessionGenerating && panelAttachedRef.current}
             protocolId={panel.protocolId}
-            presetId={panel.presetId}
-            renderingUrl={renderingUrl}
-            qrUrl={qrUrl}
+            selectComponentId={componentSelection}
             onSave={handleSave}
-            editableTitle={selection?.kind === "session"}
-            onTitleChange={handleTitleChange}
-            onTitleError={setSessionError}
           />
-        </div>
+          </div>
+        </div>}
+        {!rightPanelsOpen && <button type="button" aria-label="Show preview and JSON panels" title="Show preview and JSON panels" className="studio-collapse-control studio-collapse-control--collapsed" onClick={() => setRightPanelsOpen(true)}><ChevronRightIcon size={14} /></button>}
+      </div>
       </div>
       <ConfigModal
         open={configOpen}

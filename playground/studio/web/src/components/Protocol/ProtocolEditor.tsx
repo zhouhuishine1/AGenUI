@@ -24,7 +24,7 @@ interface ProtocolEditorProps {
   selectComponentId?: { id: string; seq: number } | null;
 }
 
-/** Find the first JSON object node whose top-level property "id" equals targetId. */
+/** Find the string value of the first JSON property named "id" matching targetId. */
 function findObjectWithId(node: SyntaxNode, doc: string, targetId: string): SyntaxNode | null {
   if (node.type.name === "Object") {
     let child = node.firstChild;
@@ -39,7 +39,7 @@ function findObjectWithId(node: SyntaxNode, doc: string, targetId: string): Synt
           value.type.name === "String" &&
           doc.slice(value.from, value.to) === JSON.stringify(targetId)
         ) {
-          return node;
+          return value;
         }
       }
       child = child.nextSibling;
@@ -73,7 +73,7 @@ export function ProtocolEditor({ value, onChange, readOnly, viewRef, onHistoryCh
     if (view) onHistoryChange?.({ canUndo: undoDepth(view.state) > 0, canRedo: redoDepth(view.state) > 0 });
   }, [view, viewRef, onHistoryChange]);
 
-  // Select (and scroll to) the JSON object matching the requested component id.
+  // Select (and scroll to) the id value matching the requested preview component.
   useEffect(() => {
     if (!selectComponentId || !view) return;
     const doc = view.state.doc.toString();
@@ -84,6 +84,7 @@ export function ProtocolEditor({ value, onChange, readOnly, viewRef, onHistoryCh
       effects: EditorView.scrollIntoView(node.from, { y: "center" }),
       scrollIntoView: true,
     });
+    view.focus();
   }, [selectComponentId, view]);
 
   return (

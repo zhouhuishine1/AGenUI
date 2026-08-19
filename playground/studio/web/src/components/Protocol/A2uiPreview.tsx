@@ -5,7 +5,7 @@ import { z } from "zod";
 import { buildPreviewProtocol } from "@/lib/previewProtocol";
 import type { A2uiPayload } from "@/types";
 
-interface Props { components: A2uiPayload; datamodel: A2uiPayload | null; onAction: (action: unknown) => void; referenceSize?: { width: number; height: number } | null; fit?: "contain" | "width"; /** Called with the component id when the user clicks a rendered element. */ onSelectComponent?: (id: string) => void; }
+interface Props { components: A2uiPayload; datamodel: A2uiPayload | null; onAction: (action: unknown) => void; referenceSize?: { width: number; height: number } | null; fit?: "contain" | "width"; /** Called with the component id when the user clicks a rendered element. */ onSelectComponent?: (id: string) => void; selectedComponentId?: string; }
 
 const extensionSchema = z.object({}).passthrough();
 const nativeTypes = ["Text", "Icon", "Image", "Button", "Card", "Row", "Column", "List", "Divider", "Tabs"] as const;
@@ -192,12 +192,15 @@ const previewCatalog = new Catalog<ReactComponentImplementation>(
 const supportedTypes = new Set(previewCatalog.components.keys());
 const defaultReferenceCanvas = { width: 1206, height: 1175 };
 
-export function A2uiPreview({ components, datamodel, onAction, onSelectComponent, referenceSize, fit = "contain" }: Props) {
+export function A2uiPreview({ components, datamodel, onAction, onSelectComponent, selectedComponentId, referenceSize, fit = "contain" }: Props) {
   const [surface, setSurface] = useState<SurfaceModel<ReactComponentImplementation> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scale, setScale] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const referenceCanvas = referenceSize ?? defaultReferenceCanvas;
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const [hoveredElement, setHoveredElement] = useState<HTMLElement | null>(null);
+  const referenceCanvas = referenceSize ?? { width: defaultReferenceCanvas.width, height: contentHeight ?? defaultReferenceCanvas.height };
   const protocol = useMemo(() => {
     try { return buildPreviewProtocol(components, datamodel); }
     catch (cause) { return cause instanceof Error ? cause : new Error("Preview is invalid"); }
@@ -222,13 +225,21 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Preview could not render"); }
   }, [onAction, protocol]);
   useEffect(() => {
+    if (referenceSize || !contentRef.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setContentHeight(Math.ceil(entry.contentRect.height));
+    });
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [referenceSize, surface]);
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(([entry]) => setScale(Math.min(
-      1,
-      entry.contentRect.width / referenceCanvas.width,
-      ...(fit === "contain" ? [entry.contentRect.height / referenceCanvas.height] : []),
-    )));
+    const observer = new ResizeObserver(([entry]) => {
+      const widthScale = entry.contentRect.width / referenceCanvas.width;
+      const heightScale = entry.contentRect.height / referenceCanvas.height;
+      setScale(Math.min(widthScale, ...(fit === "contain" ? [heightScale] : [])));
+    });
     observer.observe(container);
     return () => observer.disconnect();
   }, [fit, referenceCanvas.height, referenceCanvas.width]);
@@ -240,7 +251,21 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     const id = element?.dataset.a2uiComponentId;
     if (id) onSelectComponent(id);
   };
-  return <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-white" onClick={handleClick}>{surface ? (
+  const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    setHoveredElement(target.closest<HTMLElement>("[data-a2ui-component-id]"));
+  };
+  const handleMouseLeave = () => setHoveredElement(null);
+  const outlineFor = (element: HTMLElement | null, style: "dashed" | "solid") => {
+    if (!element || !containerRef.current) return null;
+    const bounds = element.getBoundingClientRect();
+    const containerBounds = containerRef.current.getBoundingClientRect();
+    return <div aria-hidden="true" data-testid={`a2ui-${style}-outline`} style={{ position: "absolute", zIndex: 10, pointerEvents: "none", left: bounds.left - containerBounds.left, top: bounds.top - containerBounds.top, width: bounds.width, height: bounds.height, border: `1px ${style} var(--brand-500, #2273F7)` }} />;
+  };
+  const selectedElement = selectedComponentId
+    ? Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-a2ui-component-id]") ?? []).find((element) => element.dataset.a2uiComponentId === selectedComponentId) ?? null
+    : null;
+  return <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-white" onClick={handleClick} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>{surface ? (
     <div
       style={{
         position: "absolute",
@@ -251,6 +276,6 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
         transform: fit === "width" ? `translateX(-50%) scale(${scale})` : `translate(-50%, -50%) scale(${scale})`,
         transformOrigin: fit === "width" ? "top center" : "center",
       }}
-    ><A2uiSurface surface={surface} /></div>
-  ) : <div className="p-3 text-xs text-slate-400">Preparing preview…</div>}</div>;
+    ><div ref={contentRef}><A2uiSurface surface={surface} /></div></div>
+  ) : <div className="p-3 text-xs text-slate-400">Preparing preview…</div>}{outlineFor(hoveredElement, "dashed")}{outlineFor(selectedElement, "solid")}</div>;
 }
