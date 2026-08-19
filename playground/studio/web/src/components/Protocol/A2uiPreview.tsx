@@ -272,10 +272,18 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     return () => observer.disconnect();
   }, [fit, referenceCanvas.height, referenceCanvas.width]);
   useLayoutEffect(() => {
-    const element = selectedComponentId
-      ? Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-a2ui-component-id]") ?? []).find((candidate) => candidate.dataset.a2uiComponentId === selectedComponentId) ?? null
-      : null;
-    setSelectedElement(element);
+    const container = containerRef.current;
+    const updateSelectedElement = () => {
+      const element = selectedComponentId
+        ? Array.from(container?.querySelectorAll<HTMLElement>("[data-a2ui-component-id]") ?? []).find((candidate) => candidate.dataset.a2uiComponentId === selectedComponentId) ?? null
+        : null;
+      setSelectedElement(element);
+    };
+    updateSelectedElement();
+    if (!container || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(updateSelectedElement);
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [selectedComponentId, surface]);
   if (error) return <div role="alert" className="p-3 text-xs text-amber-700">Preview error: {error}</div>;
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {

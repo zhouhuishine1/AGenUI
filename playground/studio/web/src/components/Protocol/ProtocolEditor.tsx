@@ -122,6 +122,7 @@ const HISTORY_FIELDS = { history: historyField };
 
 export function ProtocolEditor({ value, onChange, readOnly, viewRef, onHistoryChange, historyState, onHistoryStateChange, selectComponentId, onComponentSelection }: ProtocolEditorProps) {
   const suppressSelectionSyncRef = useRef(false);
+  const selectionSyncFrameRef = useRef<number | null>(null);
   const scrollTopRef = useRef(0);
   const extensions = useMemo(() => [
     json(),
@@ -130,7 +131,7 @@ export function ProtocolEditor({ value, onChange, readOnly, viewRef, onHistoryCh
         onHistoryChange?.({ canUndo: undoDepth(update.state) > 0, canRedo: redoDepth(update.state) > 0 });
         onHistoryStateChange?.(update.state.toJSON(HISTORY_FIELDS));
       }
-      if ((update.selectionSet || update.docChanged) && !suppressSelectionSyncRef.current) {
+      if (update.selectionSet && !suppressSelectionSyncRef.current) {
         onComponentSelection?.(componentIdForSelection(
           syntaxTree(update.state).topNode,
           update.state.doc.toString(),
@@ -150,13 +151,18 @@ export function ProtocolEditor({ value, onChange, readOnly, viewRef, onHistoryCh
     if (!view || value === view.state.doc.toString()) return;
     const scrollTop = view.scrollDOM.scrollTop;
     suppressSelectionSyncRef.current = true;
-    try {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
-    } finally {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
+    if (selectionSyncFrameRef.current !== null) cancelAnimationFrame(selectionSyncFrameRef.current);
+    selectionSyncFrameRef.current = requestAnimationFrame(() => {
       suppressSelectionSyncRef.current = false;
-    }
+      selectionSyncFrameRef.current = null;
+    });
     requestAnimationFrame(() => { view.scrollDOM.scrollTop = scrollTop; });
   }, [value, view]);
+
+  useEffect(() => () => {
+    if (selectionSyncFrameRef.current !== null) cancelAnimationFrame(selectionSyncFrameRef.current);
+  }, []);
 
   // Select (and scroll to) the id value matching the requested preview component.
   useEffect(() => {
