@@ -1,6 +1,6 @@
 import { A2uiSurface, basicCatalog, createBinderlessComponentImplementation, type ReactComponentImplementation } from "@a2ui/react/v0_9";
 import { Catalog, MessageProcessor, type ComponentContext, type SurfaceModel } from "@a2ui/web_core/v0_9";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { z } from "zod";
 import { buildPreviewProtocol } from "@/lib/previewProtocol";
 import type { A2uiPayload } from "@/types";
@@ -227,6 +227,7 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
   const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const [hoveredElement, setHoveredElement] = useState<HTMLElement | null>(null);
+  const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(null);
   const referenceCanvas = referenceSize ?? { width: defaultReferenceCanvas.width, height: contentHeight ?? defaultReferenceCanvas.height };
   const protocol = useMemo(() => {
     try { return buildPreviewProtocol(components, datamodel); }
@@ -270,6 +271,12 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     observer.observe(container);
     return () => observer.disconnect();
   }, [fit, referenceCanvas.height, referenceCanvas.width]);
+  useLayoutEffect(() => {
+    const element = selectedComponentId
+      ? Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-a2ui-component-id]") ?? []).find((candidate) => candidate.dataset.a2uiComponentId === selectedComponentId) ?? null
+      : null;
+    setSelectedElement(element);
+  }, [selectedComponentId, surface]);
   if (error) return <div role="alert" className="p-3 text-xs text-amber-700">Preview error: {error}</div>;
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!onSelectComponent) return;
@@ -289,9 +296,6 @@ export function A2uiPreview({ components, datamodel, onAction, onSelectComponent
     const containerBounds = containerRef.current.getBoundingClientRect();
     return <div aria-hidden="true" data-testid={`a2ui-${style}-outline`} style={{ position: "absolute", zIndex: 10, pointerEvents: "none", left: bounds.left - containerBounds.left, top: bounds.top - containerBounds.top, width: bounds.width, height: bounds.height, border: `1px ${style} var(--brand-500, #2273F7)` }} />;
   };
-  const selectedElement = selectedComponentId
-    ? Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-a2ui-component-id]") ?? []).find((element) => element.dataset.a2uiComponentId === selectedComponentId) ?? null
-    : null;
   return <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-white" onClick={handleClick} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>{surface ? (
     <div
       style={{
