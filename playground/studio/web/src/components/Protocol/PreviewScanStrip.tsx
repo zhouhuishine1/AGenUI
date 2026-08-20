@@ -75,7 +75,7 @@ export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datam
   return (
     <div className="h-full min-h-0 border-b border-slate-200 bg-white p-2.5">
       <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
-          {preview && onComponentsChange && <VisualEditorToolbar components={preview.components} selectedComponentId={selectedComponentId} onChange={(next) => onComponentsChange(JSON.stringify(next, null, 2))} />}
+          {preview && onComponentsChange && <VisualEditorToolbar components={preview.components} datamodel={preview.datamodel} selectedComponentId={selectedComponentId} onChange={(next) => onComponentsChange(JSON.stringify(next, null, 2))} />}
           {preview ? (
             <div className="min-h-0 flex-1"><A2uiPreview components={preview.components} datamodel={preview.datamodel} referenceSize={referenceSize} fit="contain" onAction={(payload) => setAction(JSON.stringify(payload))} onSelectComponent={onSelectComponent} selectedComponentId={selectedComponentId} /></div>
           ) : renderingUrl ? (

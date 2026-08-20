@@ -106,6 +106,74 @@ describe("VisualEditorToolbar", () => {
     }));
   });
 
+  it("writes a confirmed event action only for the selected Button", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "button", component: "Button", child: "label" })} datamodel={{ version: "v0.9", updateDataModel: { surfaceId: "test", path: "/path", value: { labels: { humidity: "湿度" } } } }} selectedComponentId="button" onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "事件" }));
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "refreshFlightStatus" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加参数" }));
+    fireEvent.change(screen.getByLabelText("参数键 1"), { target: { value: "humidity" } });
+    fireEvent.click(screen.getByRole("button", { name: "从DataModel选择" }));
+    fireEvent.click(screen.getByRole("button", { name: /\/path\/labels\/humidity/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "确认" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "确认" })[0]);
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      updateComponents: expect.objectContaining({ components: [expect.objectContaining({ action: { event: { name: "refreshFlightStatus", context: { humidity: { path: "/path/labels/humidity" } } } } })] }),
+    }));
+  });
+
+  it("shows the configured event tool in standard color", () => {
+    render(<VisualEditorToolbar components={protocol({ id: "button", component: "Button", action: { event: { name: "go" } } })} selectedComponentId="button" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "事件" }).className).toContain("text-slate-600");
+  });
+
+  it("writes the selected function call return type", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "button", component: "Button" })} selectedComponentId="button" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "事件" }));
+    fireEvent.click(screen.getByRole("button", { name: "functionCall" }));
+    fireEvent.change(screen.getByLabelText("Call"), { target: { value: "formatDate" } });
+    fireEvent.change(screen.getByLabelText("返回类型"), { target: { value: "string" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      updateComponents: expect.objectContaining({ components: [expect.objectContaining({ action: { functionCall: { call: "formatDate", args: {}, returnType: "string" } } })] }),
+    }));
+  });
+
+  it("keeps each event type draft while the dialog remains open", () => {
+    render(<VisualEditorToolbar components={protocol({ id: "button", component: "Button" })} selectedComponentId="button" onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "事件" }));
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "refresh" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加参数" }));
+    fireEvent.change(screen.getByLabelText("参数键 1"), { target: { value: "flight" } });
+    fireEvent.change(screen.getByLabelText("参数值 1"), { target: { value: "CA4113" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "functionCall" }));
+    fireEvent.change(screen.getByLabelText("Call"), { target: { value: "submitForm" } });
+    fireEvent.change(screen.getByLabelText("返回类型"), { target: { value: "boolean" } });
+    fireEvent.click(screen.getByRole("button", { name: "event" }));
+
+    expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe("refresh");
+    expect((screen.getByLabelText("参数键 1") as HTMLInputElement).value).toBe("flight");
+    expect((screen.getByLabelText("参数值 1") as HTMLInputElement).value).toBe("CA4113");
+    fireEvent.click(screen.getByRole("button", { name: "functionCall" }));
+    expect((screen.getByLabelText("Call") as HTMLInputElement).value).toBe("submitForm");
+    expect((screen.getByLabelText("返回类型") as HTMLSelectElement).value).toBe("boolean");
+  });
+
+  it("removes an existing action after clearing and confirming", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "button", component: "Button", action: { event: { name: "go" } } })} selectedComponentId="button" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "事件" }));
+    fireEvent.click(screen.getByRole("button", { name: "清空事件" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      updateComponents: expect.objectContaining({ components: [expect.not.objectContaining({ action: expect.anything() })] }),
+    }));
+  });
+
   it("shows a List only its supported cross-axis control and writes align", () => {
     const onChange = vi.fn();
     const { rerender } = render(<VisualEditorToolbar components={protocol({ id: "list", component: "List", direction: "vertical", children: [] })} selectedComponentId="list" onChange={onChange} />);

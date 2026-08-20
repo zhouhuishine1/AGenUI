@@ -8,6 +8,7 @@ type Dimension = { value: string; unit: string };
 
 interface Props {
   components: A2uiPayload;
+  datamodel?: A2uiPayload | null;
   selectedComponentId?: string;
   onChange: (components: A2uiPayload) => void;
 }
@@ -31,6 +32,86 @@ function VerticalIcon() { return <ToolIcon><svg viewBox="0 0 24 24" fill="none" 
 function SizeIcon() { return <ToolIcon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3v18M3 5h4M3 19h4M19 3v18M17 5h4M17 19h4M8 12h8" /></svg></ToolIcon>; }
 function ImageModeIcon() { return <ToolIcon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8" cy="8" r="1.5" /><path d="m21 15-5-5L5 21" /></svg></ToolIcon>; }
 function MoreIcon() { return <ToolIcon><span className="-mt-2 text-xl leading-none">…</span></ToolIcon>; }
+function EventIcon() { return <ToolIcon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></ToolIcon>; }
+
+type EventType = "event" | "functionCall";
+type ValueEntry = { key: string; value: string; source: "manual" | "path" };
+type EditorState = { type: EventType; name: string; returnType: string; entries: ValueEntry[] };
+type DraftsByType = Record<EventType, EditorState>;
+type DataPath = { path: string; value: unknown };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function dataPaths(datamodel: A2uiPayload | null): DataPath[] {
+  const update = asRecord(datamodel?.updateDataModel) ?? asRecord(datamodel);
+  if (!update) return [];
+  const root = typeof update.path === "string" ? update.path.replace(/\/$/, "") || "/" : "/";
+  const result: DataPath[] = [];
+  const visit = (value: unknown, path: string) => {
+    result.push({ path, value });
+    const record = asRecord(value);
+    if (record) Object.entries(record).forEach(([key, child]) => visit(child, `${path === "/" ? "" : path}/${key}`));
+  };
+  visit(update.value ?? update, root);
+  return result;
+}
+
+function editorState(action: unknown): EditorState {
+  const record = asRecord(action);
+  const event = asRecord(record?.event);
+  const functionCall = asRecord(record?.functionCall);
+  const type: EventType = functionCall ? "functionCall" : "event";
+  const source = functionCall ?? event;
+  const pairs = asRecord(source?.[type === "event" ? "context" : "args"]) ?? {};
+  return {
+    type,
+    name: typeof source?.[type === "event" ? "name" : "call"] === "string" ? source[type === "event" ? "name" : "call"] as string : "",
+    returnType: typeof functionCall?.returnType === "string" ? functionCall.returnType : "",
+    entries: Object.entries(pairs).map(([key, value]) => {
+      const path = asRecord(value)?.path;
+      return { key, value: typeof path === "string" ? path : typeof value === "string" ? value : JSON.stringify(value), source: typeof path === "string" ? "path" : "manual" };
+    }),
+  };
+}
+
+function emptyEditorState(type: EventType): EditorState {
+  return { type, name: "", returnType: "", entries: [] };
+}
+
+function EventEditor({ action, datamodel, onConfirm, onClose }: { action: unknown; datamodel: A2uiPayload | null; onConfirm: (action?: Record<string, unknown>) => void; onClose: () => void }) {
+  const initialDraft = useMemo(() => editorState(action), [action]);
+  const [type, setType] = useState<EventType>(initialDraft.type);
+  const [drafts, setDrafts] = useState<DraftsByType>(() => ({ event: initialDraft.type === "event" ? initialDraft : emptyEditorState("event"), functionCall: initialDraft.type === "functionCall" ? initialDraft : emptyEditorState("functionCall") }));
+  const [picker, setPicker] = useState<number | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [cleared, setCleared] = useState(false);
+  const paths = useMemo(() => dataPaths(datamodel ?? null), [datamodel]);
+  const draft = drafts[type];
+  const nameLabel = type === "event" ? "名称" : "Call";
+  const entriesLabel = type === "event" ? "Context 参数" : "Args 参数";
+  const setDraft = (updater: (current: EditorState) => EditorState) => setDrafts((current) => ({ ...current, [type]: updater(current[type]) }));
+  const changeEntry = (index: number, change: Partial<ValueEntry>) => setDraft((current) => ({ ...current, entries: current.entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...change } : entry) }));
+  const save = () => {
+    if (cleared) { onConfirm(); return; }
+    const values = Object.fromEntries(draft.entries.filter((entry) => entry.key).map((entry) => [entry.key, entry.source === "path" ? { path: entry.value } : entry.value]));
+    const body = { [type === "event" ? "name" : "call"]: draft.name, [type === "event" ? "context" : "args"]: values, ...(type === "functionCall" && draft.returnType ? { returnType: draft.returnType } : {}) };
+    onConfirm({ [type]: body });
+  };
+  return createPortal(<div role="dialog" aria-label="事件菜单" className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
+      <div className="mb-5 flex items-center justify-between"><h2 className="text-base font-semibold text-slate-800">事件</h2><button type="button" aria-label="清空事件" onClick={() => { setDrafts({ event: emptyEditorState("event"), functionCall: emptyEditorState("functionCall") }); setCleared(true); }} className="text-xs text-slate-500 hover:text-red-600">清空</button></div>
+      <div className="mb-4"><p className="mb-2 text-xs font-medium text-slate-600">事件类型</p><div className="flex gap-2">{(["event", "functionCall"] as EventType[]).map((nextType) => <button type="button" key={nextType} onClick={() => { setType(nextType); setCleared(false); }} className={`rounded-md border px-3 py-1.5 text-sm ${type === nextType ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"}`}>{nextType}</button>)}</div></div>
+      <div className="mb-5 flex gap-3"><label className="block flex-1 text-xs font-medium text-slate-600">{nameLabel}<input aria-label={nameLabel} value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); setCleared(false); }} className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-500" /></label>{type === "functionCall" && <label className="block w-40 text-xs font-medium text-slate-600">返回类型<select aria-label="返回类型" value={draft.returnType} onChange={(event) => setDraft((current) => ({ ...current, returnType: event.target.value }))} className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800"><option value="">不选择</option>{["string", "number", "boolean", "array", "object", "any", "void"].map((returnType) => <option key={returnType} value={returnType}>{returnType}</option>)}</select></label>}</div>
+      <div><div className="mb-2 flex items-center justify-between"><p className="text-xs font-medium text-slate-600">{entriesLabel}</p><button type="button" onClick={() => { setDraft((current) => ({ ...current, entries: [...current.entries, { key: "", value: "", source: "manual" }] })); setCleared(false); }} className="text-xs text-brand-600 hover:text-brand-700">添加参数</button></div>
+        <div className="space-y-2">{draft.entries.map((entry, index) => <div key={index} className="flex flex-wrap items-center gap-2"><input aria-label={`参数键 ${index + 1}`} value={entry.key} onChange={(event) => changeEntry(index, { key: event.target.value })} placeholder="键名" className="w-28 rounded border border-slate-300 px-2 py-1.5 text-sm" /><span>:</span><input aria-label={`参数值 ${index + 1}`} disabled={entry.source === "path"} value={entry.value} onChange={(event) => changeEntry(index, { value: event.target.value })} placeholder="键值" className="min-w-[130px] flex-1 rounded border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-500" /><div className="flex rounded border border-slate-200 p-0.5 text-xs"><button type="button" onClick={() => changeEntry(index, { source: "manual" })} className={`rounded px-2 py-1 ${entry.source === "manual" ? "bg-brand-50 text-brand-700" : "text-slate-500"}`}>手动输入</button><button type="button" onClick={() => { setSelectedPath(entry.source === "path" ? entry.value : null); setPicker(index); }} className={`rounded px-2 py-1 ${entry.source === "path" ? "bg-brand-50 text-brand-700" : "text-slate-500"}`}>从DataModel选择</button></div><button type="button" aria-label={`删除参数 ${index + 1}`} onClick={() => setDraft((current) => ({ ...current, entries: current.entries.filter((_, entryIndex) => entryIndex !== index) }))} className="text-slate-400 hover:text-red-600">删除</button></div>)}</div>
+      </div>
+      <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">取消</button><button type="button" onClick={save} className="rounded-md bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">确认</button></div>
+      {picker !== null && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/30 p-4"><div role="dialog" aria-label="DataModel 键值选择" className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl"><p className="mb-3 text-sm font-semibold text-slate-800">选择 DataModel 键值</p><div className="max-h-72 overflow-auto rounded border border-slate-200 p-2">{paths.map((item) => <button type="button" key={item.path} onClick={() => setSelectedPath(item.path)} className={`block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-slate-100 ${selectedPath === item.path ? "bg-brand-50 text-brand-700" : ""}`} style={{ paddingLeft: `${8 + Math.max(0, item.path.split("/").length - 2) * 16}px` }}>{item.path} {asRecord(item.value) === null && <span className="text-slate-400">({String(item.value)})</span>}</button>)}</div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setPicker(null)} className="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">取消</button><button type="button" disabled={!selectedPath} onClick={() => { if (selectedPath) changeEntry(picker, { value: selectedPath, source: "path" }); setPicker(null); }} className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white disabled:opacity-40">确认</button></div></div></div>}
+    </section>
+  </div>, document.body);
+}
 
 function componentsArray(payload: A2uiPayload): ComponentRecord[] | null {
   const update = payload.updateComponents;
@@ -113,13 +194,14 @@ function SizePanel({ styles, onChange }: { styles: Record<string, unknown>; onCh
   </div>;
 }
 
-export function VisualEditorToolbar({ components, selectedComponentId, onChange }: Props) {
+export function VisualEditorToolbar({ components, datamodel, selectedComponentId, onChange }: Props) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState<number>(Infinity);
   const [openMenu, setOpenMenu] = useState<"margin" | "size" | "horizontal" | "vertical" | "fit" | "overflow" | null>(null);
   const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
+  const [eventEditorOpen, setEventEditorOpen] = useState(false);
   const records = useMemo(() => componentsArray(components), [components]);
   const selected = records?.find((component) => component.id === selectedComponentId) ?? null;
   const type = typeof selected?.component === "string" ? selected.component : "root";
@@ -131,6 +213,7 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
   const isHorizontalList = isList && selected?.direction === "horizontal";
   const supportsHorizontal = isText || type === "Row" || type === "Column" || (isList && !isHorizontalList);
   const supportsVertical = isText || type === "Row" || type === "Column" || isHorizontalList;
+  const hasAction = Boolean(asRecord(selected?.action)?.event || asRecord(selected?.action)?.functionCall);
 
   const mutate = (id: string | undefined, updater: (component: ComponentRecord) => ComponentRecord) => {
     const source = componentsArray(components);
@@ -172,6 +255,7 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
     { id: "horizontal", label: "水平对齐", icon: <HorizontalIcon />, enabled: supportsHorizontal },
     { id: "vertical", label: "垂直对齐", icon: <VerticalIcon />, enabled: supportsVertical },
     { id: "fit", label: "图片显示", icon: <ImageModeIcon />, enabled: type === "Image" },
+    { id: "event", label: "事件", icon: <EventIcon />, enabled: type === "Button", configured: hasAction },
   ].filter((tool) => tool.enabled);
 
   useLayoutEffect(() => {
@@ -234,7 +318,7 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
   const visible = tools.slice(0, visibleCount);
   const overflow = tools.slice(visibleCount);
 
-  const toolButton = (tool: typeof tools[number]) => <button type="button" key={tool.id} onClick={() => setOpenMenu((current) => current && current !== tool.id ? null : current === tool.id ? null : tool.id as typeof openMenu)} className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium transition ${openMenu === tool.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>{tool.icon}<span>{tool.label}</span></button>;
+  const toolButton = (tool: typeof tools[number]) => <button type="button" key={tool.id} onClick={() => { if (tool.id === "event") { setOpenMenu(null); setEventEditorOpen(true); } else setOpenMenu((current) => current && current !== tool.id ? null : current === tool.id ? null : tool.id as typeof openMenu); }} className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium transition ${tool.configured ? "text-slate-600 hover:bg-slate-100" : tool.id === "event" ? "text-slate-300 hover:bg-slate-100" : openMenu === tool.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>{tool.icon}<span>{tool.label}</span></button>;
   const popupLayer = openMenu && typeof document !== "undefined" ? createPortal(
     <div ref={popupRef} className="fixed z-50 rounded-lg border border-slate-200 bg-white shadow-lg" style={popupPosition}>
       {openMenu === "overflow" ? <div className="flex gap-1 p-1.5">{overflow.map(toolButton)}</div> : popup}
@@ -246,5 +330,5 @@ export function VisualEditorToolbar({ components, selectedComponentId, onChange 
     <div ref={toolsRef} aria-hidden="true" className="invisible absolute flex gap-1">{tools.map(toolButton)}</div>
     <div className="flex min-w-0 gap-1 overflow-hidden">{visible.map(toolButton)}</div>
     {overflow.length > 0 && <button type="button" aria-label="更多编辑工具" onClick={() => setOpenMenu((current) => current && current !== "overflow" ? null : current === "overflow" ? null : "overflow")} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"><MoreIcon /><span>更多</span></button>}
-  </div>{popupLayer}</>;
+  </div>{popupLayer}{eventEditorOpen && selected && <EventEditor action={selected.action} datamodel={datamodel ?? null} onClose={() => setEventEditorOpen(false)} onConfirm={(action) => { mutate(String(selected.id), (component) => { const next = { ...component }; if (action) next.action = action; else delete next.action; return next; }); setEventEditorOpen(false); }} />}</>;
 }
