@@ -199,6 +199,7 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
   const toolsRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const pendingMarginsRef = useRef(new Map<string, string>());
+  const pendingMarginStylesRef = useRef<Record<string, unknown> | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(Infinity);
   const [openMenu, setOpenMenu] = useState<"margin" | "size" | "horizontal" | "vertical" | "fit" | "overflow" | null>(null);
   const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
@@ -235,16 +236,18 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
   const commitPendingMargins = () => {
     if (pendingMarginsRef.current.size === 0) return;
     const currentStyles = (selected?.styles && typeof selected.styles === "object" ? selected.styles : {}) as Record<string, unknown>;
-    let nextStyles = currentStyles;
+    let nextStyles = pendingMarginStylesRef.current ?? currentStyles;
     pendingMarginsRef.current.forEach((value, key) => {
       const [box, side] = key.split(":") as ["margin" | "padding", "top" | "right" | "bottom" | "left"];
       nextStyles = updateBox(nextStyles, box, side, `${value}px`);
     });
     pendingMarginsRef.current.clear();
+    pendingMarginStylesRef.current = nextStyles;
     mutate(targetId, (component) => ({ ...component, styles: nextStyles }));
   };
   const closeMenu = () => {
     commitPendingMargins();
+    pendingMarginStylesRef.current = null;
     setOpenMenu(null);
   };
   const setTextAlign = (axis: "horizontal" | "vertical", value: Alignment) => {
@@ -299,6 +302,7 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
   }, [tools.length]);
   useEffect(() => {
     commitPendingMargins();
+    pendingMarginStylesRef.current = null;
     setOpenMenu(null);
   }, [selectedComponentId]);
   useEffect(() => {

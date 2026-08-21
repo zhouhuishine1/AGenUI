@@ -35,6 +35,23 @@ describe("VisualEditorToolbar", () => {
     expect(screen.queryByLabelText("边距调节")).toBeNull();
   });
 
+  it("preserves every margin field entered before the menu closes", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello" })} selectedComponentId="text" onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "边距" }));
+    fireEvent.blur(screen.getByLabelText("外边距top"), { target: { value: "4" } });
+    fireEvent.blur(screen.getByLabelText("外边距left"), { target: { value: "8" } });
+    fireEvent.input(screen.getByLabelText("内边距bottom"), { target: { value: "12" } });
+    fireEvent.pointerDown(document.body);
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      updateComponents: expect.objectContaining({ components: [expect.objectContaining({
+        styles: { "margin-top": "4px", "margin-left": "8px", "padding-bottom": "12px" },
+      })] }),
+    }));
+  });
+
   it("updates an existing margin shorthand instead of adding side fields", () => {
     const onChange = vi.fn();
     render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello", styles: { margin: "0px 10px 0px 10px", "margin-left": "20px" } })} selectedComponentId="text" onChange={onChange} />);
