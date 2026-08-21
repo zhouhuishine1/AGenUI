@@ -108,6 +108,7 @@ export default function App() {
    * correct session instead of polluting the one currently on screen. */
   const generationContextRef = useRef<{ sessionId: string; conversation: RoundSnapshot[] } | null>(null);
   const archivedGenerationRef = useRef<string | null>(null);
+  const initialSessionSelectedRef = useRef(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const rightPanelsRef = useRef<HTMLDivElement>(null);
   const splitRatiosRef = useRef<SplitRatios>(DEFAULT_SPLIT_RATIOS);
@@ -408,6 +409,13 @@ export default function App() {
       setSessionError(error instanceof Error ? error.message : "Could not load chat history");
     }
   }, [gen.isGenerating, gen.prompt, gen.componentsText, gen.datamodelText]);
+
+  useEffect(() => {
+    if (initialSessionSelectedRef.current || library.loading) return;
+    initialSessionSelectedRef.current = true;
+    const firstSession = library.protocols[0];
+    if (firstSession) void handleSelectProtocol(firstSession.id);
+  }, [handleSelectProtocol, library.loading, library.protocols]);
 
   const handleDraftChange = useCallback((value: string) => {
     setDraft(value);
