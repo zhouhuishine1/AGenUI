@@ -7,6 +7,7 @@ import { ThinkingProcess } from "./ThinkingProcess";
 import { ValidationBanner } from "./ValidationBanner";
 import { WaitingIndicator } from "./WaitingIndicator";
 import { EyeIcon, SparkleIcon, StopIcon } from "@/components/icons";
+import { formatDateTime } from "@/lib/utils";
 import type {
   DoneEvent,
   ErrorEvent,
@@ -28,6 +29,8 @@ interface RoundView {
   live: boolean;
   status: GenerationStatus;
   images: RoundSnapshot["images"];
+  sentAt?: string;
+  respondedAt?: string;
 }
 
 function AssistantCard({ round, onShow }: { round: RoundView; onShow?: () => void }) {
@@ -95,7 +98,9 @@ function RoundBlock({ round, onShow }: { round: RoundView; onShow?: () => void }
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-tr-sm bg-brand-500 px-3.5 py-2 text-sm leading-6 text-white shadow-sm">
+        <div className="max-w-[85%]">
+          {round.sentAt && <p className="mb-1 text-right text-[10px] text-slate-400">{formatDateTime(round.sentAt)}</p>}
+          <div className="whitespace-pre-wrap rounded-xl rounded-tr-sm bg-brand-500 px-3.5 py-2 text-sm leading-6 text-white shadow-sm">
           {round.prompt}
           {round.images.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -104,11 +109,26 @@ function RoundBlock({ round, onShow }: { round: RoundView; onShow?: () => void }
               ))}
             </div>
           )}
+          </div>
         </div>
       </div>
+      {round.respondedAt && <p className="text-[10px] text-slate-400">{formatDateTime(round.respondedAt)}</p>}
       <AssistantCard round={round} onShow={onShow} />
     </div>
   );
+}
+
+function SaveRecordCard({ round, onShow }: { round: RoundSnapshot; onShow?: () => void }) {
+  const saved = round.saved_protocol;
+  if (!saved) return null;
+  return <div className="flex justify-start"><div className="group relative w-full max-w-[92%] rounded-xl rounded-tl-sm border border-slate-200 bg-white p-3 shadow-sm">
+    {round.responded_at && <p className="mb-2 text-[10px] text-slate-400">{formatDateTime(round.responded_at)}</p>}
+    <div className="space-y-1 text-xs leading-5 text-slate-600">
+      <p>调整了界面描述，{saved.component_ids.length ? `涉及ID：${saved.component_ids.join("、")}` : "未涉及ID"}</p>
+      {saved.data_paths.length > 0 && <p>调整了数据，涉及路径：{saved.data_paths.join("、")}</p>}
+    </div>
+    {onShow && <button type="button" onClick={onShow} className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-600 opacity-0 shadow-sm transition group-hover:opacity-100 hover:bg-brand-50 hover:text-brand-600"><EyeIcon size={12} />显示</button>}
+  </div></div>;
 }
 
 export interface LiveRound {
@@ -168,7 +188,7 @@ export function ConversationPanel({ history, live, onShowRound }: ConversationPa
       ) : (
         <div className="mx-auto max-w-2xl space-y-5">
           {history.map((snap) => (
-            <RoundBlock
+            snap.kind === "save" ? <SaveRecordCard key={snap.id} round={snap} onShow={onShowRound ? () => onShowRound(snap) : undefined} /> : <RoundBlock
               key={snap.id}
               onShow={onShowRound ? () => onShowRound(snap) : undefined}
               round={{
@@ -184,6 +204,8 @@ export function ConversationPanel({ history, live, onShowRound }: ConversationPa
                 live: false,
                 status: snap.error ? "error" : snap.done ? "done" : "idle",
                 images: snap.images ?? [],
+                sentAt: snap.sent_at,
+                respondedAt: snap.responded_at,
               }}
             />
           ))}
@@ -203,6 +225,7 @@ export function ConversationPanel({ history, live, onShowRound }: ConversationPa
                 live: true,
                 status: live.status,
                 images: live.images,
+                sentAt: live.startedAt ? new Date(live.startedAt).toISOString() : undefined,
               }}
             />
           )}

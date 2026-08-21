@@ -137,6 +137,7 @@ export type GenerationStatus = "idle" | "generating" | "done" | "error";
 /** Snapshot of a finished (or stopped) generation round, kept for history. */
 export interface RoundSnapshot {
   id: string;
+  kind?: "generation" | "save";
   prompt: string;
   model: string | null;
   reasoning: string;
@@ -144,6 +145,9 @@ export interface RoundSnapshot {
   done: DoneEvent | null;
   error: ErrorEvent | null;
   images: ImageAttachment[];
+  sent_at?: string;
+  responded_at?: string;
+  saved_protocol?: { components: A2uiPayload; datamodel: A2uiPayload | null; component_ids: string[]; data_paths: string[] };
 }
 
 export interface ImageAttachment {

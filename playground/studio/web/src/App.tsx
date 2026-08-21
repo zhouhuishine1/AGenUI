@@ -9,6 +9,7 @@ import { ProtocolPanel } from "@/components/Protocol/ProtocolPanel";
 import { PreviewScanStrip } from "@/components/Protocol/PreviewScanStrip";
 import { PresetSidebar, type Selection } from "@/components/Sidebar/PresetSidebar";
 import { ChevronRightIcon } from "@/components/icons";
+import { protocolChangeSummary } from "@/lib/protocolDiff";
 import { useGeneration } from "@/hooks/useGeneration";
 import { useLibrary } from "@/hooks/useLibrary";
 import { useProviders } from "@/hooks/useProviders";
@@ -187,6 +188,7 @@ export default function App() {
 
       const currentRound: RoundSnapshot = {
         id: d.protocol_id,
+        kind: "generation",
         prompt: gen.prompt,
         model: gen.model,
         reasoning: gen.reasoning,
@@ -194,6 +196,8 @@ export default function App() {
         done: d,
         error: null,
         images: liveImagesRef.current,
+        sent_at: gen.startedAt ? new Date(gen.startedAt).toISOString() : undefined,
+        responded_at: new Date().toISOString(),
       };
 
       // Append to the owning session's conversation. When the owner is still the
@@ -220,7 +224,7 @@ export default function App() {
     const key = `${owner.sessionId}:${gen.startedAt}`;
     if (archivedGenerationRef.current === key) return;
     archivedGenerationRef.current = key;
-    const round: RoundSnapshot = { id: key, prompt: gen.prompt, model: gen.model, reasoning: gen.reasoning, thinking: gen.thinking, done: null, error: gen.error, images: liveImagesRef.current };
+    const round: RoundSnapshot = { id: key, kind: "generation", prompt: gen.prompt, model: gen.model, reasoning: gen.reasoning, thinking: gen.thinking, done: null, error: gen.error, images: liveImagesRef.current, sent_at: gen.startedAt ? new Date(gen.startedAt).toISOString() : undefined };
     const conversation = [...owner.conversation, round];
     if (owner.sessionId === sessionIdRef.current) { historyRef.current = conversation; setHistory(conversation); }
     void updateSession(owner.sessionId, { conversation, status: "idle" }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save chat history"));
@@ -299,6 +303,15 @@ export default function App() {
   // changing the session's saved (canonical) protocol, so "Save" still commits
   // to the session rather than to the displayed round.
   const handleShowRound = useCallback((round: RoundSnapshot) => {
+    if (round.kind === "save" && round.saved_protocol) {
+      panelAttachedRef.current = false;
+      setPanel((p) => ({
+        ...p,
+        componentsText: JSON.stringify(round.saved_protocol!.components, null, 2),
+        datamodelText: round.saved_protocol!.datamodel ? JSON.stringify(round.saved_protocol!.datamodel, null, 2) : "",
+      }));
+      return;
+    }
     if (!round.done) return;
     panelAttachedRef.current = false;
     setPanel((p) => ({
@@ -474,7 +487,28 @@ export default function App() {
     async (components: A2uiPayload, datamodel: A2uiPayload | null) => {
       if (!panel.protocolId) throw new Error("No protocol to save");
       await updateProtocol(panel.protocolId, components, datamodel);
+      const previous = baselineProtocolRef.current;
       baselineProtocolRef.current = { components, datamodel };
+      const { componentIds, dataPaths } = protocolChangeSummary(previous, { components, datamodel: datamodel as A2uiPayload | null });
+      if (componentIds.length > 0 || dataPaths.length > 0) {
+        const saveRecord: RoundSnapshot = {
+          id: `save:${panel.protocolId}:${Date.now()}`,
+          kind: "save",
+          prompt: "",
+          model: null,
+          reasoning: "",
+          thinking: "",
+          done: null,
+          error: null,
+          images: [],
+          responded_at: new Date().toISOString(),
+          saved_protocol: { components, datamodel: datamodel as A2uiPayload | null, component_ids: componentIds, data_paths: dataPaths },
+        };
+        const nextHistory = [...historyRef.current, saveRecord];
+        historyRef.current = nextHistory;
+        setHistory(nextHistory);
+        if (sessionIdRef.current) void updateSession(sessionIdRef.current, { conversation: nextHistory }).catch(() => undefined);
+      }
       void library.refresh();
     },
     [panel.protocolId, library],
