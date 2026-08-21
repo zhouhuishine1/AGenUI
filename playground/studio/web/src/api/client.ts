@@ -37,6 +37,7 @@ export async function fetchAllConfig(): Promise<{ active: string | null; provide
 export async function saveConfig(
   providers: ConfigProvider[],
   removeProviders: string[] = [],
+  active?: string,
 ): Promise<void> {
   const set_providers: Record<string, { base_url: string; api_key: string; model: string; max_tokens: number }> = {};
   for (const p of providers) {
@@ -53,6 +54,7 @@ export async function saveConfig(
     body: JSON.stringify({
       set_providers,
       ...(removeProviders.length > 0 ? { remove_providers: removeProviders } : {}),
+      ...(active ? { active } : {}),
     }),
   });
   if (!res.ok) {

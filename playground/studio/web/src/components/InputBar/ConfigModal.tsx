@@ -5,7 +5,7 @@ import { fetchAllConfig, saveConfig } from "@/api/client";
 import { EyeIcon, EyeOffIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import type { ConfigProvider } from "@/types";
 
-type ProviderDraft = ConfigProvider & { id: number; isNew: boolean };
+type ProviderDraft = ConfigProvider & { id: number; isNew: boolean; originalName?: string };
 
 interface ConfigModalProps {
   open: boolean;
@@ -16,6 +16,8 @@ interface ConfigModalProps {
 export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
   const [providers, setProviders] = useState<ProviderDraft[]>([]);
   const [originalNames, setOriginalNames] = useState<string[]>([]);
+  const [activeProvider, setActiveProvider] = useState<string | null>(null);
+  const [editingNames, setEditingNames] = useState<Set<number>>(new Set());
   const [showKeys, setShowKeys] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +30,12 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
     setLoading(true);
     setError(null);
     setShowKeys(new Set());
+    setEditingNames(new Set());
     fetchAllConfig()
       .then((data) => {
-        setProviders(data.providers.map((provider) => ({ ...provider, id: ++nextProviderId.current, isNew: false })));
+        setProviders(data.providers.map((provider) => ({ ...provider, id: ++nextProviderId.current, isNew: false, originalName: provider.name })));
         setOriginalNames(data.providers.map((p) => p.name));
+        setActiveProvider(data.active);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -70,6 +74,11 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
       next.delete(id);
       return next;
     });
+    setEditingNames((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -80,7 +89,8 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
       // deleted by the user; tell the backend to remove them from config.json.
       const currentNames = new Set(providers.map((p) => p.name));
       const removed = originalNames.filter((n) => !currentNames.has(n));
-      await saveConfig(providers.map(({ id: _id, isNew: _isNew, ...provider }) => provider), removed);
+      const renamedActive = providers.find((p) => p.originalName === activeProvider && p.name !== activeProvider);
+      await saveConfig(providers.map(({ id: _id, isNew: _isNew, originalName: _originalName, ...provider }) => provider), removed, renamedActive?.name);
       onSaved();
       onClose();
     } catch (e) {
@@ -116,7 +126,7 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
               >
                 {/* Provider name + delete */}
                 <div className="mb-2.5 flex items-center justify-between">
-                  {p.isNew ? (
+                  {p.isNew || editingNames.has(p.id) ? (
                     <input
                       value={p.name}
                       onChange={(e) => updateField(p.id, "name", e.target.value)}
@@ -124,9 +134,14 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
                       className="w-40 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
                     />
                   ) : (
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <button
+                      type="button"
+                      onClick={() => setEditingNames((prev) => new Set(prev).add(p.id))}
+                      title="Edit provider name"
+                      className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-brand-600"
+                    >
                       {p.name}
-                    </span>
+                    </button>
                   )}
                   <button
                     type="button"

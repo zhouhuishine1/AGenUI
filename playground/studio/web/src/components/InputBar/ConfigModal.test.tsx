@@ -44,6 +44,27 @@ describe("ConfigModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("renames an active provider and keeps it active after saving", async () => {
+    fetchAllConfig.mockResolvedValue({
+      active: "first",
+      providers: [{ name: "first", base_url: "https://example.test", api_key: "key", model: "model", max_tokens: 8192 }],
+    });
+    saveConfig.mockResolvedValue(undefined);
+    render(<ConfigModal open onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    await screen.findByRole("button", { name: "first" });
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    const name = screen.getByPlaceholderText("provider name");
+    fireEvent.change(name, { target: { value: "renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saveConfig).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: "renamed" })],
+      ["first"],
+      "renamed",
+    ));
+  });
+
   it("persists and closes only through Save", async () => {
     fetchAllConfig.mockResolvedValue({ providers: [] });
     saveConfig.mockResolvedValue(undefined);
