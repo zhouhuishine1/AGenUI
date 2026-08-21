@@ -21,6 +21,20 @@ describe("VisualEditorToolbar", () => {
     }));
   });
 
+  it("commits a pending margin value when its menu closes", () => {
+    const onChange = vi.fn();
+    render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello" })} selectedComponentId="text" onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "边距" }));
+    fireEvent.input(screen.getByLabelText("外边距top"), { target: { value: "16" } });
+    fireEvent.pointerDown(document.body);
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      updateComponents: expect.objectContaining({ components: [expect.objectContaining({ styles: { "margin-top": "16px" } })] }),
+    }));
+    expect(screen.queryByLabelText("边距调节")).toBeNull();
+  });
+
   it("updates an existing margin shorthand instead of adding side fields", () => {
     const onChange = vi.fn();
     render(<VisualEditorToolbar components={protocol({ id: "text", component: "Text", text: "Hello", styles: { margin: "0px 10px 0px 10px", "margin-left": "20px" } })} selectedComponentId="text" onChange={onChange} />);

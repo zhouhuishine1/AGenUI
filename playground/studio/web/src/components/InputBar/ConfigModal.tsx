@@ -1,9 +1,11 @@
 /** Modal for viewing/editing all provider configurations in config.json. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchAllConfig, saveConfig } from "@/api/client";
-import { EyeIcon, EyeOffIcon, PlusIcon, TrashIcon, XIcon } from "@/components/icons";
+import { EyeIcon, EyeOffIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import type { ConfigProvider } from "@/types";
+
+type ProviderDraft = ConfigProvider & { id: number; isNew: boolean };
 
 interface ConfigModalProps {
   open: boolean;
@@ -12,24 +14,23 @@ interface ConfigModalProps {
 }
 
 export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
-  const [providers, setProviders] = useState<ConfigProvider[]>([]);
+  const [providers, setProviders] = useState<ProviderDraft[]>([]);
   const [originalNames, setOriginalNames] = useState<string[]>([]);
-  const [newNames, setNewNames] = useState<Set<string>>(new Set());
-  const [showKeys, setShowKeys] = useState<Set<string>>(new Set());
+  const [showKeys, setShowKeys] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const nextProviderId = useRef(0);
 
   // Load config when modal opens.
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setError(null);
-    setNewNames(new Set());
     setShowKeys(new Set());
     fetchAllConfig()
       .then((data) => {
-        setProviders(data.providers);
+        setProviders(data.providers.map((provider) => ({ ...provider, id: ++nextProviderId.current, isNew: false })));
         setOriginalNames(data.providers.map((p) => p.name));
       })
       .catch((e) => setError(e.message))
@@ -37,38 +38,36 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
   }, [open]);
 
   const updateField = useCallback(
-    (name: string, field: keyof ConfigProvider, value: string | number) => {
+    (id: number, field: keyof ConfigProvider, value: string | number) => {
       setProviders((prev) =>
-        prev.map((p) => (p.name === name ? { ...p, [field]: value } : p)),
+        prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
       );
     },
     [],
   );
 
-  const toggleKey = (name: string) => {
+  const toggleKey = (id: number) => {
     setShowKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const addProvider = () => {
-    const name = `custom_${Date.now().toString(36)}`;
     setProviders((prev) => [
       ...prev,
-      { name, base_url: "", api_key: "", model: "", max_tokens: 8192 },
+      { id: ++nextProviderId.current, isNew: true, name: "", base_url: "", api_key: "", model: "", max_tokens: 8192 },
     ]);
-    setNewNames((prev) => new Set(prev).add(name));
-    setShowKeys((prev) => new Set(prev).add(name));
+    setShowKeys((prev) => new Set(prev).add(nextProviderId.current));
   };
 
-  const removeProvider = (name: string) => {
-    setProviders((prev) => prev.filter((p) => p.name !== name));
-    setNewNames((prev) => {
+  const removeProvider = (id: number) => {
+    setProviders((prev) => prev.filter((p) => p.id !== id));
+    setShowKeys((prev) => {
       const next = new Set(prev);
-      next.delete(name);
+      next.delete(id);
       return next;
     });
   };
@@ -81,7 +80,7 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
       // deleted by the user; tell the backend to remove them from config.json.
       const currentNames = new Set(providers.map((p) => p.name));
       const removed = originalNames.filter((n) => !currentNames.has(n));
-      await saveConfig(providers, removed);
+      await saveConfig(providers.map(({ id: _id, isNew: _isNew, ...provider }) => provider), removed);
       onSaved();
       onClose();
     } catch (e) {
@@ -94,24 +93,13 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3.5">
           <h2 className="text-sm font-semibold text-slate-800">Model Configuration</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          >
-            <XIcon size={15} />
-          </button>
         </div>
 
         {/* Body */}
@@ -123,15 +111,15 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
           {!loading &&
             providers.map((p) => (
               <div
-                key={p.name}
+                key={p.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5"
               >
                 {/* Provider name + delete */}
                 <div className="mb-2.5 flex items-center justify-between">
-                  {newNames.has(p.name) ? (
+                  {p.isNew ? (
                     <input
                       value={p.name}
-                      onChange={(e) => updateField(p.name, "name", e.target.value)}
+                      onChange={(e) => updateField(p.id, "name", e.target.value)}
                       placeholder="provider name"
                       className="w-40 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
                     />
@@ -142,7 +130,7 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
                   )}
                   <button
                     type="button"
-                    onClick={() => removeProvider(p.name)}
+                    onClick={() => removeProvider(p.id)}
                     title="Remove provider"
                     className="flex h-6 w-6 items-center justify-center rounded-md text-slate-300 transition hover:bg-red-50 hover:text-red-500"
                   >
@@ -158,7 +146,7 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
                     </span>
                     <input
                       value={p.base_url}
-                      onChange={(e) => updateField(p.name, "base_url", e.target.value)}
+                      onChange={(e) => updateField(p.id, "base_url", e.target.value)}
                       placeholder="https://api.example.com/v1"
                       className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
                     />
@@ -170,7 +158,7 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
                     </span>
                     <input
                       value={p.model}
-                      onChange={(e) => updateField(p.name, "model", e.target.value)}
+                      onChange={(e) => updateField(p.id, "model", e.target.value)}
                       placeholder="model-name"
                       className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
                     />
@@ -182,18 +170,18 @@ export function ConfigModal({ open, onClose, onSaved }: ConfigModalProps) {
                     </span>
                     <div className="relative">
                       <input
-                        type={showKeys.has(p.name) ? "text" : "password"}
+                        type={showKeys.has(p.id) ? "text" : "password"}
                         value={p.api_key}
-                        onChange={(e) => updateField(p.name, "api_key", e.target.value)}
+                        onChange={(e) => updateField(p.id, "api_key", e.target.value)}
                         placeholder="sk-..."
                         className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 pr-9 text-xs text-slate-700 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
                       />
                       <button
                         type="button"
-                        onClick={() => toggleKey(p.name)}
+                        onClick={() => toggleKey(p.id)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                       >
-                        {showKeys.has(p.name) ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
+                        {showKeys.has(p.id) ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
                       </button>
                     </div>
                   </label>

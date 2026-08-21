@@ -198,6 +198,7 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const pendingMarginsRef = useRef(new Map<string, string>());
   const [visibleCount, setVisibleCount] = useState<number>(Infinity);
   const [openMenu, setOpenMenu] = useState<"margin" | "size" | "horizontal" | "vertical" | "fit" | "overflow" | null>(null);
   const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
@@ -231,6 +232,21 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
 
   const targetId = selectedComponentId;
   const styles = (selected?.styles && typeof selected.styles === "object" ? selected.styles : {}) as Record<string, unknown>;
+  const commitPendingMargins = () => {
+    if (pendingMarginsRef.current.size === 0) return;
+    const currentStyles = (selected?.styles && typeof selected.styles === "object" ? selected.styles : {}) as Record<string, unknown>;
+    let nextStyles = currentStyles;
+    pendingMarginsRef.current.forEach((value, key) => {
+      const [box, side] = key.split(":") as ["margin" | "padding", "top" | "right" | "bottom" | "left"];
+      nextStyles = updateBox(nextStyles, box, side, `${value}px`);
+    });
+    pendingMarginsRef.current.clear();
+    mutate(targetId, (component) => ({ ...component, styles: nextStyles }));
+  };
+  const closeMenu = () => {
+    commitPendingMargins();
+    setOpenMenu(null);
+  };
   const setTextAlign = (axis: "horizontal" | "vertical", value: Alignment) => {
     if (!alignmentTarget || !records) return;
     const current = ((alignmentTarget.styles as Record<string, unknown> | undefined)?.["text-align"] as string | undefined) ?? "left top";
@@ -281,12 +297,15 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
     if (toolbarRef.current) observer.observe(toolbarRef.current);
     return () => observer.disconnect();
   }, [tools.length]);
-  useEffect(() => setOpenMenu(null), [selectedComponentId]);
+  useEffect(() => {
+    commitPendingMargins();
+    setOpenMenu(null);
+  }, [selectedComponentId]);
   useEffect(() => {
     if (!openMenu) return;
     const closeOnOutside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!toolbarRef.current?.contains(target) && !popupRef.current?.contains(target)) setOpenMenu(null);
+      if (!toolbarRef.current?.contains(target) && !popupRef.current?.contains(target)) closeMenu();
     };
     document.addEventListener("pointerdown", closeOnOutside);
     return () => document.removeEventListener("pointerdown", closeOnOutside);
@@ -307,18 +326,18 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
     };
   }, [openMenu]);
 
-  const marginInput = (box: "margin" | "padding", side: "top" | "right" | "bottom" | "left") => <label className="flex w-[118px] items-center gap-1.5 text-[11px] text-slate-500"><span className="w-3">{{ top: "上", right: "右", bottom: "下", left: "左" }[side]}</span><span className="flex min-w-0 flex-1 items-center rounded border border-slate-200 bg-white focus-within:border-brand-400"><input aria-label={`${box === "margin" ? "外边距" : "内边距"}${side}`} inputMode="numeric" pattern="[0-9]*" defaultValue={splitBox(styles, box, side)} placeholder="0" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} onBlur={(event) => { if (/^\d+$/.test(event.target.value)) { const currentStyles = (selected?.styles && typeof selected.styles === "object" ? selected.styles : {}) as Record<string, unknown>; mutate(targetId, (component) => ({ ...component, styles: updateBox(currentStyles, box, side, `${event.target.value}px`) })); } }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-xs text-slate-700 outline-none" /><span className="pr-2 text-[10px] text-slate-400">px</span></span></label>;
+  const marginInput = (box: "margin" | "padding", side: "top" | "right" | "bottom" | "left") => <label className="flex w-[118px] items-center gap-1.5 text-[11px] text-slate-500"><span className="w-3">{{ top: "上", right: "右", bottom: "下", left: "左" }[side]}</span><span className="flex min-w-0 flex-1 items-center rounded border border-slate-200 bg-white focus-within:border-brand-400"><input aria-label={`${box === "margin" ? "外边距" : "内边距"}${side}`} inputMode="numeric" pattern="[0-9]*" defaultValue={splitBox(styles, box, side)} placeholder="0" onInput={(event) => { const value = event.currentTarget.value.replace(/\D/g, ""); event.currentTarget.value = value; if (value) pendingMarginsRef.current.set(`${box}:${side}`, value); else pendingMarginsRef.current.delete(`${box}:${side}`); }} onBlur={(event) => { const value = event.currentTarget.value.replace(/\D/g, ""); if (value) pendingMarginsRef.current.set(`${box}:${side}`, value); else pendingMarginsRef.current.delete(`${box}:${side}`); commitPendingMargins(); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-xs text-slate-700 outline-none" /><span className="pr-2 text-[10px] text-slate-400">px</span></span></label>;
   const marginPanel = <div className="w-[300px] space-y-4 p-3" aria-label="边距调节">
     {(["margin", "padding"] as const).map((box) => <section key={box} className="space-y-2.5"><p className="text-[11px] font-medium text-slate-500">{box === "margin" ? "外边距" : "内边距"}</p><div className="space-y-2"><div className="flex justify-center">{marginInput(box, "top")}</div><div className="flex justify-between">{marginInput(box, "left")}{marginInput(box, "right")}</div><div className="flex justify-center">{marginInput(box, "bottom")}</div></div></section>)}
   </div>;
   const alignmentPanel = (axis: "horizontal" | "vertical") => <div className="flex min-w-[210px] gap-1 p-2" aria-label={`${axis === "horizontal" ? "水平" : "垂直"}对齐选项`}>
-    {(["start", "center", "end"] as Alignment[]).map((value) => <button type="button" key={value} onClick={() => { isText ? setTextAlign(axis, value) : setLayoutAlign(axis, value); setOpenMenu(null); }} className="flex flex-1 flex-col items-center gap-1 rounded px-2 py-2 text-[11px] text-slate-600 hover:bg-slate-100"><span aria-hidden="true" className="grid h-5 w-5 place-items-center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">{axis === "horizontal" ? <>{value === "start" && <><path d="M4 5v14" /><path d="M8 7h11M8 12h8M8 17h11" /></>}{value === "center" && <><path d="M12 4v16" /><path d="M5 7h14M7 12h10M5 17h14" /></>}{value === "end" && <><path d="M20 5v14" /><path d="M5 7h11M8 12h8M5 17h11" /></>}</> : <>{value === "start" && <><path d="M5 4h14" /><path d="M7 8v11M12 8v8M17 8v11" /></>}{value === "center" && <><path d="M4 12h16" /><path d="M7 5v14M12 7v10M17 5v14" /></>}{value === "end" && <><path d="M5 20h14" /><path d="M7 5v11M12 8v8M17 5v11" /></>}</>}</svg></span>{{ start: axis === "horizontal" ? "左对齐" : "顶对齐", center: "居中", end: axis === "horizontal" ? "右对齐" : "底对齐" }[value]}</button>)}
+    {(["start", "center", "end"] as Alignment[]).map((value) => <button type="button" key={value} onClick={() => { isText ? setTextAlign(axis, value) : setLayoutAlign(axis, value); closeMenu(); }} className="flex flex-1 flex-col items-center gap-1 rounded px-2 py-2 text-[11px] text-slate-600 hover:bg-slate-100"><span aria-hidden="true" className="grid h-5 w-5 place-items-center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">{axis === "horizontal" ? <>{value === "start" && <><path d="M4 5v14" /><path d="M8 7h11M8 12h8M8 17h11" /></>}{value === "center" && <><path d="M12 4v16" /><path d="M5 7h14M7 12h10M5 17h14" /></>}{value === "end" && <><path d="M20 5v14" /><path d="M5 7h11M8 12h8M5 17h11" /></>}</> : <>{value === "start" && <><path d="M5 4h14" /><path d="M7 8v11M12 8v8M17 8v11" /></>}{value === "center" && <><path d="M4 12h16" /><path d="M7 5v14M12 7v10M17 5v14" /></>}{value === "end" && <><path d="M5 20h14" /><path d="M7 5v11M12 8v8M17 5v11" /></>}</>}</svg></span>{{ start: axis === "horizontal" ? "左对齐" : "顶对齐", center: "居中", end: axis === "horizontal" ? "右对齐" : "底对齐" }[value]}</button>)}
   </div>;
-  const popup = openMenu === "margin" ? marginPanel : openMenu === "size" ? <SizePanel styles={styles} onChange={(nextStyles) => mutate(targetId, (component) => ({ ...component, styles: nextStyles }))} /> : openMenu === "horizontal" ? alignmentPanel("horizontal") : openMenu === "vertical" ? alignmentPanel("vertical") : openMenu === "fit" ? <div className="flex min-w-[310px] gap-1 p-2" aria-label="图片显示模式">{FIT_OPTIONS.map(([value, label]) => <button type="button" key={value} onClick={() => { mutate(targetId, (component) => ({ ...component, fit: value })); setOpenMenu(null); }} className="rounded px-2 py-2 text-[11px] text-slate-600 hover:bg-slate-100">{label}</button>)}</div> : null;
+  const popup = openMenu === "margin" ? marginPanel : openMenu === "size" ? <SizePanel styles={styles} onChange={(nextStyles) => mutate(targetId, (component) => ({ ...component, styles: nextStyles }))} /> : openMenu === "horizontal" ? alignmentPanel("horizontal") : openMenu === "vertical" ? alignmentPanel("vertical") : openMenu === "fit" ? <div className="flex min-w-[310px] gap-1 p-2" aria-label="图片显示模式">{FIT_OPTIONS.map(([value, label]) => <button type="button" key={value} onClick={() => { mutate(targetId, (component) => ({ ...component, fit: value })); closeMenu(); }} className="rounded px-2 py-2 text-[11px] text-slate-600 hover:bg-slate-100">{label}</button>)}</div> : null;
   const visible = tools.slice(0, visibleCount);
   const overflow = tools.slice(visibleCount);
 
-  const toolButton = (tool: typeof tools[number]) => <button type="button" key={tool.id} onClick={() => { if (tool.id === "event") { setOpenMenu(null); setEventEditorOpen(true); } else setOpenMenu((current) => current && current !== tool.id ? null : current === tool.id ? null : tool.id as typeof openMenu); }} className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium transition ${tool.configured ? "text-slate-600 hover:bg-slate-100" : tool.id === "event" ? "text-slate-300 hover:bg-slate-100" : openMenu === tool.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>{tool.icon}<span>{tool.label}</span></button>;
+  const toolButton = (tool: typeof tools[number]) => <button type="button" key={tool.id} onClick={() => { const next = openMenu === tool.id ? null : tool.id; closeMenu(); if (tool.id === "event") setEventEditorOpen(true); else if (next) setOpenMenu(next as typeof openMenu); }} className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium transition ${tool.configured ? "text-slate-600 hover:bg-slate-100" : tool.id === "event" ? "text-slate-300 hover:bg-slate-100" : openMenu === tool.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>{tool.icon}<span>{tool.label}</span></button>;
   const popupLayer = openMenu && typeof document !== "undefined" ? createPortal(
     <div ref={popupRef} className="fixed z-50 rounded-lg border border-slate-200 bg-white shadow-lg" style={popupPosition}>
       {openMenu === "overflow" ? <div className="flex gap-1 p-1.5">{overflow.map(toolButton)}</div> : popup}
@@ -329,6 +348,6 @@ export function VisualEditorToolbar({ components, datamodel, selectedComponentId
   return <><div ref={toolbarRef} className="relative flex min-h-10 shrink-0 items-center border-b border-slate-200 bg-white px-1.5 shadow-sm">
     <div ref={toolsRef} aria-hidden="true" className="invisible absolute flex gap-1">{tools.map(toolButton)}</div>
     <div className="flex min-w-0 gap-1 overflow-hidden">{visible.map(toolButton)}</div>
-    {overflow.length > 0 && <button type="button" aria-label="更多编辑工具" onClick={() => setOpenMenu((current) => current && current !== "overflow" ? null : current === "overflow" ? null : "overflow")} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"><MoreIcon /><span>更多</span></button>}
+    {overflow.length > 0 && <button type="button" aria-label="更多编辑工具" onClick={() => { const next = openMenu === "overflow" ? null : "overflow"; closeMenu(); if (next) setOpenMenu(next); }} className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"><MoreIcon /><span>更多</span></button>}
   </div>{popupLayer}{eventEditorOpen && selected && <EventEditor action={selected.action} datamodel={datamodel ?? null} onClose={() => setEventEditorOpen(false)} onConfirm={(action) => { mutate(String(selected.id), (component) => { const next = { ...component }; if (action) next.action = action; else delete next.action; return next; }); setEventEditorOpen(false); }} />}</>;
 }

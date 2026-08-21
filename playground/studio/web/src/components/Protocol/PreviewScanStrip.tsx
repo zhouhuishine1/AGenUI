@@ -28,7 +28,6 @@ export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datam
   const [preview, setPreview] = useState<{ components: A2uiPayload; datamodel: A2uiPayload | null } | null>(null);
   const [referenceSize, setReferenceSize] = useState<{ width: number; height: number } | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [action, setAction] = useState<string | null>(null);
 
   // Close lightbox on Escape.
   useEffect(() => {
@@ -77,7 +76,7 @@ export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datam
       <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
           {preview && onComponentsChange && <VisualEditorToolbar components={preview.components} datamodel={preview.datamodel} selectedComponentId={selectedComponentId} onChange={(next) => onComponentsChange(JSON.stringify(next, null, 2))} />}
           {preview ? (
-            <div className="min-h-0 flex-1"><A2uiPreview components={preview.components} datamodel={preview.datamodel} referenceSize={referenceSize} fit="contain" onAction={(payload) => setAction(JSON.stringify(payload))} onSelectComponent={onSelectComponent} selectedComponentId={selectedComponentId} /></div>
+            <div className="min-h-0 flex-1"><A2uiPreview components={preview.components} datamodel={preview.datamodel} referenceSize={referenceSize} fit="contain" onAction={() => undefined} onSelectComponent={onSelectComponent} selectedComponentId={selectedComponentId} /></div>
           ) : renderingUrl ? (
               <button
                 type="button"
@@ -98,8 +97,6 @@ export function PreviewScanStrip({ presetId, renderingUrl, componentsText, datam
               </div>
           )}
       </div>
-      {action && <p className="mt-1 truncate text-[10px] text-brand-600">Action captured (local preview only): {action}</p>}
-
       {/* Lightbox overlay */}
       {lightbox && renderingUrl && (
         <div
