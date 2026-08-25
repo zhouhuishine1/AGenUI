@@ -17,8 +17,10 @@ Generation loop (see plan Part B5):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from pathlib import Path
 from typing import Any, Generator
+import re
 
 from .benchmark.generation.extractor import (
     extract_json_blocks,
@@ -36,7 +38,102 @@ from .providers import OpenAICompatProvider, ProviderError
 
 # Repo root / skills / a2ui-generation (shared read-only with the benchmark).
 SKILL_DIR = Path(__file__).resolve().parents[3] / "skills" / "a2ui-generation"
+CROP_SKILL_DIR = Path(__file__).resolve().parents[3] / "skills" / "image-cropping"
 TRUNCATION_RETRY_MAX_TOKENS = 16_384
+HTTP_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+CROP_URL_RE = re.compile(
+    r"^agenui-crop://reference/(?P<resource_id>[0-9a-f]{12})"
+    r"#x=(?P<x>[0-9.]+)&y=(?P<y>[0-9.]+)&width=(?P<width>[0-9.]+)&height=(?P<height>[0-9.]+)$"
+)
+LOGGER = logging.getLogger(__name__)
+
+
+def _crop_instructions(session_id: str | None, resource_ids: list[str | None] | None) -> str:
+    if not session_id or not resource_ids:
+        return ""
+    resources = {item["id"]: item for item in storage.list_resources(session_id) or []}
+    references = [
+        (index + 1, resource_id, resources.get(resource_id))
+        for index, resource_id in enumerate(resource_ids)
+        if resource_id in resources
+    ]
+    if not references:
+        return ""
+    skill = (CROP_SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    contract = (CROP_SKILL_DIR / "reference" / "crop-contract.md").read_text(encoding="utf-8")
+    manifest = "\n".join(
+        f"- reference-{index}: resource_id={resource_id}; full_image_url={resource['url']}"
+        for index, resource_id, resource in references
+    )
+    return f"{skill}\n\n## Crop Contract\n\n{contract}\n\n## Current Reference Images\n\n{manifest}\n\nReturn exactly the required two A2UI JSON blocks."
+
+
+def _resolve_crop_value(value: Any, session_id: str | None, reference_ids: set[str]) -> Any:
+    literal = value.get("literalString") if isinstance(value, dict) else value
+    if not isinstance(literal, str) or not literal.startswith("agenui-crop://"):
+        return value
+    match = CROP_URL_RE.fullmatch(literal)
+    if match is None or session_id is None:
+        LOGGER.warning("image-crop-invalid-request session_id=%s value=%r", session_id, literal)
+        return ""
+    resource_id = match.group("resource_id")
+    if resource_id not in reference_ids:
+        LOGGER.warning("image-crop-unavailable-reference session_id=%s resource_id=%s", session_id, resource_id)
+        return ""
+    fallback = storage.resource_url(session_id, resource_id)
+    try:
+        resource = storage.crop_resource(
+            session_id,
+            resource_id,
+            {key: float(match.group(key)) for key in ("x", "y", "width", "height")},
+        )
+        return {"literalString": resource["url"]} if isinstance(value, dict) else resource["url"]
+    except ValueError as exc:
+        LOGGER.warning("image-crop-fallback session_id=%s resource_id=%s error=%s", session_id, resource_id, exc)
+        return {"literalString": fallback} if isinstance(value, dict) else fallback
+
+
+def _resolve_image_crops(components: dict[str, Any], session_id: str | None, resource_ids: list[str | None] | None) -> dict[str, Any]:
+    references = {resource_id for resource_id in resource_ids or [] if resource_id}
+    for component in components.get("updateComponents", {}).get("components", []):
+        if not isinstance(component, dict) or component.get("component") != "Image":
+            continue
+        for property_name in ("url", "src"):
+            if property_name in component:
+                component[property_name] = _resolve_crop_value(component[property_name], session_id, references)
+    return components
+
+
+def _resolve_datamodel_crops(value: Any, session_id: str | None, reference_ids: set[str]) -> Any:
+    """Resolve crop placeholders in data-bound Image values."""
+    if isinstance(value, str):
+        return _resolve_crop_value(value, session_id, reference_ids)
+    if isinstance(value, list):
+        return [_resolve_datamodel_crops(item, session_id, reference_ids) for item in value]
+    if isinstance(value, dict):
+        if isinstance(value.get("literalString"), str) and value["literalString"].startswith("agenui-crop://"):
+            return _resolve_crop_value(value, session_id, reference_ids)
+        return {
+            key: _resolve_datamodel_crops(item, session_id, reference_ids)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _localize_image_urls(value: Any, session_id: str | None) -> Any:
+    """Download generated remote images into the owning session when possible."""
+    if not session_id:
+        return value
+    if isinstance(value, dict):
+        return {key: _localize_image_urls(item, session_id) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_localize_image_urls(item, session_id) for item in value]
+    if isinstance(value, str) and HTTP_URL_RE.match(value):
+        try:
+            return storage.download_resource(session_id, value)["url"]
+        except ValueError:
+            return value
+    return value
 
 
 # Instruction wrapped around the user message on refinement turns (i.e. when a
@@ -208,6 +305,8 @@ def generate_a2ui_stream(
     enable_reasoning: bool | None = None,
     history: list[dict] | None = None,
     image_data_urls: list[str] | None = None,
+    session_id: str | None = None,
+    reference_resource_ids: list[str | None] | None = None,
 ) -> Generator[GenerationEvent, None, None]:
     """Generate an A2UI protocol, yielding progress events as they happen.
 
@@ -230,6 +329,9 @@ def generate_a2ui_stream(
             is_page=is_page,
             allow_placeholder_images=True,
         )
+        crop_instructions = _crop_instructions(session_id, reference_resource_ids)
+        if crop_instructions:
+            system_prompt = f"{system_prompt}\n\n---\n\n{crop_instructions}"
         user_message = build_user_prompt(user_prompt)
         # On refinement turns, explicitly frame the request as an incremental
         # modification of the previous protocol so the model preserves the rest
@@ -321,6 +423,14 @@ def generate_a2ui_stream(
             return
 
         yield _stage("saving")
+        result["components"] = _resolve_image_crops(result["components"], session_id, reference_resource_ids)
+        result["datamodel"] = _resolve_datamodel_crops(
+            result["datamodel"],
+            session_id,
+            {resource_id for resource_id in reference_resource_ids or [] if resource_id},
+        )
+        result["components"] = _localize_image_urls(result["components"], session_id)
+        result["datamodel"] = _localize_image_urls(result["datamodel"], session_id)
         record = storage.save_protocol(
             prompt=user_prompt,
             mode=mode,
@@ -329,6 +439,8 @@ def generate_a2ui_stream(
             components_dict=result["components"],
             datamodel_dict=result["datamodel"],
         )
+        if session_id:
+            storage.update_session(session_id, protocol_id=record["id"])
 
         yield GenerationEvent(
             type="done",

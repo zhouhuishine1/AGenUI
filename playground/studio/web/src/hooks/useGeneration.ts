@@ -88,7 +88,7 @@ export function useGeneration() {
   }, []);
 
   const generate = useCallback(
-    (prompt: string, mode: string, provider: string | null, reasoning: boolean, history: ChatMessage[] = [], images: ImageAttachment[] = []) => {
+    (prompt: string, mode: string, provider: string | null, reasoning: boolean, history: ChatMessage[] = [], images: ImageAttachment[] = [], sessionId: string | null = null) => {
       // Reset for a new round.
       bufferRef.current = "";
       reasoningRef.current = "";
@@ -160,6 +160,7 @@ export function useGeneration() {
         controller.signal,
         history,
         images,
+        sessionId,
       ).catch(() => {
         // fetchEventSource rejects after onerror; state already handled there.
       });

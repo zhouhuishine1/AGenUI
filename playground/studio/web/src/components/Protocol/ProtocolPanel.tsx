@@ -4,12 +4,14 @@ import { redo, undo } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProtocolEditor } from "./ProtocolEditor";
+import { ResourcePanel, type ResourcePanelProps } from "./ResourcePanel";
 import { SaveBar, type SaveState } from "./SaveBar";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
-import type { A2uiPayload } from "@/types";
+import type { A2uiPayload, ImageResource } from "@/types";
 
-type Tab = "components" | "datamodel";
+type Tab = "components" | "datamodel" | "resources";
+type EditorTab = Exclude<Tab, "resources">;
 type HistoryAvailability = { canUndo: boolean; canRedo: boolean };
 
 const EMPTY_HISTORY: HistoryAvailability = { canUndo: false, canRedo: false };
@@ -25,6 +27,11 @@ interface ProtocolPanelProps {
   selectComponentId?: { id: string; seq: number } | null;
   onComponentSelection?: (id: string | null) => void;
   onSave: (components: A2uiPayload, datamodel: A2uiPayload | null) => Promise<void>;
+  sessionId?: string | null;
+  resources?: ImageResource[];
+  onResourceAdd?: ResourcePanelProps["onAdd"];
+  onResourceUpdate?: ResourcePanelProps["onUpdate"];
+  onResourceDelete?: ResourcePanelProps["onDelete"];
 }
 
 export function ProtocolPanel({
@@ -38,12 +45,17 @@ export function ProtocolPanel({
   selectComponentId,
   onComponentSelection,
   onSave,
+  sessionId,
+  resources,
+  onResourceAdd,
+  onResourceUpdate,
+  onResourceDelete,
 }: ProtocolPanelProps) {
   const [tab, setTab] = useState<Tab>("components");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [historyAvailability, setHistoryAvailability] = useState<Record<Tab, HistoryAvailability>>({
+  const [historyAvailability, setHistoryAvailability] = useState<Record<EditorTab, HistoryAvailability>>({
     components: EMPTY_HISTORY,
     datamodel: EMPTY_HISTORY,
   });
@@ -88,8 +100,8 @@ export function ProtocolPanel({
 
   const handleUndo = () => dispatchHistoryCommand(undo);
   const handleRedo = () => dispatchHistoryCommand(redo);
-  const activeHistory = historyAvailability[tab];
-  const handleHistoryChange = useCallback((editorTab: Tab, history: HistoryAvailability) => {
+  const activeHistory = tab === "resources" ? EMPTY_HISTORY : historyAvailability[tab];
+  const handleHistoryChange = useCallback((editorTab: EditorTab, history: HistoryAvailability) => {
     setHistoryAvailability((current) => current[editorTab].canUndo === history.canUndo && current[editorTab].canRedo === history.canRedo
       ? current
       : { ...current, [editorTab]: history });
@@ -103,7 +115,7 @@ export function ProtocolPanel({
     <div className="flex h-full min-w-0 flex-col border-l border-slate-200 bg-slate-50/50">
       {/* Tabs */}
       <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2 pt-1.5">
-            {(["components", "datamodel"] as Tab[]).map((t) => (
+            {(["components", "datamodel", "resources"] as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -115,7 +127,7 @@ export function ProtocolPanel({
                     : "text-slate-400 hover:text-slate-600",
                 )}
               >
-                {t === "components" ? "updateComponents" : "updateDataModel"}
+                {t === "components" ? "updateComponents" : t === "datamodel" ? "updateDataModel" : "resources"}
               </button>
             ))}
             <div className="ml-auto flex items-center gap-1">
@@ -169,6 +181,9 @@ export function ProtocolPanel({
                 historyState={historyStatesRef.current[editorScope]?.datamodel}
                 onHistoryStateChange={(state) => { historyStatesRef.current[editorScope] = { ...historyStatesRef.current[editorScope], datamodel: state }; }}
               />
+            </div>
+            <div className={cn("h-full", tab !== "resources" && "hidden")}>
+              <ResourcePanel sessionId={sessionId ?? null} resources={resources ?? []} disabled={streaming} onAdd={onResourceAdd ?? (async () => {})} onUpdate={onResourceUpdate ?? (async () => {})} onDelete={onResourceDelete ?? (async () => {})} />
             </div>
       </div>
 

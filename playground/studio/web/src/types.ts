@@ -69,6 +69,15 @@ export interface SessionRecord extends SessionSummary {
   title_manual?: boolean;
   provider?: string | null;
   reasoning?: boolean;
+  resources?: ImageResource[];
+}
+
+export interface ImageResource {
+  id: string;
+  name: string;
+  content_type: string;
+  selected: boolean;
+  url: string;
 }
 
 export interface PresetSummary {
@@ -152,4 +161,5 @@ export interface RoundSnapshot {
 
 export interface ImageAttachment {
   data_url: string;
+  resource_id?: string;
 }

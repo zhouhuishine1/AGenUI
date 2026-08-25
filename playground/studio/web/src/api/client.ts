@@ -12,6 +12,7 @@ import type {
   SessionSummary,
   ProvidersResponse,
   ServerInfo,
+  ImageResource,
 } from "@/types";
 
 async function getJson<T>(url: string): Promise<T> {
@@ -119,6 +120,29 @@ export async function createSession(title: string): Promise<SessionRecord> {
   const payload = await res.json() as SessionRecord & { error?: string };
   if (!res.ok) throw new Error(payload.error || "Could not create session");
   return payload;
+}
+
+export async function fetchSessionResources(sessionId: string): Promise<ImageResource[]> {
+  return (await getJson<{ resources: ImageResource[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/resources`)).resources;
+}
+
+export async function createSessionResource(sessionId: string, body: { data_url?: string; source_url?: string; name?: string }): Promise<ImageResource> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/resources`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const payload = await res.json() as ImageResource & { error?: string };
+  if (!res.ok) throw new Error(payload.error || "Could not add image");
+  return payload;
+}
+
+export async function updateSessionResource(sessionId: string, resourceId: string, changes: Partial<Pick<ImageResource, "name" | "selected">>): Promise<ImageResource> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/resources/${encodeURIComponent(resourceId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+  const payload = await res.json() as ImageResource & { error?: string };
+  if (!res.ok) throw new Error(payload.error || "Could not update image");
+  return payload;
+}
+
+export async function deleteSessionResource(sessionId: string, resourceId: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/resources/${encodeURIComponent(resourceId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Could not delete image");
 }
 
 export async function updateSession(id: string, changes: Partial<Pick<SessionRecord, "title" | "conversation" | "draft" | "protocol_id" | "status" | "provider" | "reasoning">>): Promise<SessionRecord> {

@@ -38,11 +38,12 @@ export async function startGeneration(
   signal: AbortSignal,
   history: ChatMessage[] = [],
   images: ImageAttachment[] = [],
+  sessionId: string | null = null,
 ): Promise<void> {
   await fetchEventSource("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, mode, stream: true, provider, reasoning, history, images }),
+    body: JSON.stringify({ prompt, mode, stream: true, provider, reasoning, history, images, session_id: sessionId }),
     signal,
     // Keep the stream alive even when the tab is backgrounded.
     openWhenHidden: true,

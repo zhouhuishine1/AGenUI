@@ -6,6 +6,7 @@ import { Header } from "@/components/Header";
 import { InputBar } from "@/components/InputBar/InputBar";
 import { ConfigModal } from "@/components/InputBar/ConfigModal";
 import { ProtocolPanel } from "@/components/Protocol/ProtocolPanel";
+import type { ResourcePanelProps } from "@/components/Protocol/ResourcePanel";
 import { PreviewScanStrip } from "@/components/Protocol/PreviewScanStrip";
 import { PresetSidebar, type Selection } from "@/components/Sidebar/PresetSidebar";
 import { ChevronRightIcon } from "@/components/icons";
@@ -17,13 +18,17 @@ import {
   fetchPreset,
   fetchProtocol,
   fetchSession,
+  fetchSessionResources,
   createSession,
   updateSession,
   generateSessionTitle,
   deleteSession,
   updateProtocol,
+  createSessionResource,
+  deleteSessionResource,
+  updateSessionResource,
 } from "@/api/client";
-import type { A2uiPayload, ImageAttachment, RoundSnapshot } from "@/types";
+import type { A2uiPayload, ImageAttachment, ImageResource, RoundSnapshot } from "@/types";
 import type { ChatMessage } from "@/api/sse";
 
 type SplitRatios = [number, number, number];
@@ -91,6 +96,7 @@ export default function App() {
   const [sessionProvider, setSessionProvider] = useState<string | null | undefined>(undefined);
   const [sessionReasoning, setSessionReasoning] = useState<boolean | undefined>(undefined);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [resources, setResources] = useState<ImageResource[]>([]);
   const [globalLayout] = useState(loadGlobalLayout);
   const [splitRatios, setSplitRatios] = useState<SplitRatios>(globalLayout.splitRatios);
   const [rightPanelsOpen, setRightPanelsOpen] = useState(globalLayout.rightPanelsOpen);
@@ -212,6 +218,7 @@ export default function App() {
       }
       if (ownerSessionId) {
         void updateSession(ownerSessionId, { conversation, protocol_id: d.protocol_id, status: "idle" }).catch((error) => setSessionError(error instanceof Error ? error.message : "Could not save chat history"));
+        if (ownerIsCurrent) void fetchSessionResources(ownerSessionId).then(setResources).catch(() => undefined);
       }
       void library.refresh();
     }
@@ -248,11 +255,22 @@ export default function App() {
         }
       }
       setSessionError(null);
+      let generationImages = images;
+      if (images.length > 0) {
+        try {
+          const added = await Promise.all(images.map((image, index) => createSessionResource(activeSessionId!, { data_url: image.data_url, name: `Reference image ${index + 1}` })));
+          generationImages = images.map((image, index) => ({ ...image, resource_id: added[index].id }));
+          if (sessionIdRef.current === activeSessionId) setResources((current) => [...current, ...added]);
+        } catch (error) {
+          setSessionError(error instanceof Error ? error.message : "Could not save reference images");
+          return;
+        }
+      }
       // A new round re-attaches the right panel to the live stream and
       // immediately surfaces the task in "My Generations" (as the highlighted
       // in-flight entry) so the user can switch away and come back at any time.
       panelAttachedRef.current = true;
-      liveImagesRef.current = images;
+      liveImagesRef.current = generationImages;
       setSelection({ kind: "generation" });
 
       // Capture the owning session + its conversation so the finished round is
@@ -293,7 +311,7 @@ export default function App() {
         }
       }
 
-      gen.generate(prompt, "component", provider, reasoning, chatHistory, images);
+      gen.generate(prompt, "component", provider, reasoning, chatHistory, generationImages, activeSessionId);
     },
     [gen, library],
   );
@@ -335,6 +353,7 @@ export default function App() {
       editorDraftsRef.current[session.id] = { componentsText: "{}", datamodelText: "" };
       sessionIdRef.current = session.id;
       setSessionId(session.id);
+      setResources([]);
       setSelection({ kind: "session", id: session.id });
       historyRef.current = [];
       setHistory([]);
@@ -369,6 +388,7 @@ export default function App() {
         hasRendering: rec.has_rendering ?? false,
       });
       setSessionId(null);
+      setResources([]);
       sessionIdRef.current = null;
       setDraft("");
       setHistory([]);
@@ -407,6 +427,7 @@ export default function App() {
       setDraft(rec.draft);
       setSessionProvider(rec.provider);
       setSessionReasoning(rec.reasoning);
+      setResources(rec.resources ?? []);
       setSessionError(null);
       if (isRunningSession) {
         setPanel({
@@ -451,6 +472,7 @@ export default function App() {
       // The session being viewed is gone: reset back to a pristine state.
       sessionIdRef.current = null;
       setSessionId(null);
+      setResources([]);
       setSelection(null);
       historyRef.current = [];
       setHistory([]);
@@ -674,7 +696,24 @@ export default function App() {
             protocolId={panel.protocolId}
             selectComponentId={componentSelection?.source === "preview" ? componentSelection : null}
             onComponentSelection={handleEditorComponentSelection}
-            onSave={handleSave}
+          onSave={handleSave}
+            sessionId={sessionId}
+            resources={resources}
+            onResourceAdd={async (input: Parameters<ResourcePanelProps["onAdd"]>[0]) => {
+              if (!sessionIdRef.current) throw new Error("Select a session first");
+              const resource = await createSessionResource(sessionIdRef.current, input);
+              setResources((current) => [...current, resource]);
+            }}
+            onResourceUpdate={async (resourceId: string, changes: Parameters<ResourcePanelProps["onUpdate"]>[1]) => {
+              if (!sessionIdRef.current) throw new Error("Select a session first");
+              const resource = await updateSessionResource(sessionIdRef.current, resourceId, changes);
+              setResources((current) => current.map((item) => item.id === resource.id ? resource : item));
+            }}
+            onResourceDelete={async (resourceId: string) => {
+              if (!sessionIdRef.current) throw new Error("Select a session first");
+              await deleteSessionResource(sessionIdRef.current, resourceId);
+              setResources((current) => current.filter((item) => item.id !== resourceId));
+            }}
           />
           </div>
         </div>}

@@ -22,6 +22,7 @@ PROTOCOLS_DIR = CONFIG_DIR / "protocols"
 CUSTOM_DIR = PROTOCOLS_DIR / "custom"
 SAMPLES_DIR = PROTOCOLS_DIR / "presets"
 SESSIONS_DIR = CONFIG_DIR / "sessions"
+SESSION_RESOURCES_DIR = CONFIG_DIR / "session_resources"
 
 # Preset template for first-run config generation.
 # api_key left empty for user to fill.

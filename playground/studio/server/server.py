@@ -67,6 +67,7 @@ class ImageAttachment(BaseModel):
     """A browser-local image encoded as a data URL for a vision-capable model."""
 
     data_url: str
+    resource_id: str | None = None
 
 
 class GenerateRequest(BaseModel):
@@ -82,6 +83,7 @@ class GenerateRequest(BaseModel):
     # Multi-turn history: prior user/assistant messages for protocol refinement.
     history: list[ChatMessage] = []
     images: list[ImageAttachment] = []
+    session_id: str | None = None
 
 
 class ProviderUpdate(BaseModel):
@@ -303,7 +305,8 @@ def generate(req: GenerateRequest):
     def event_stream():
         for event in generate_a2ui_stream(
             provider, prompt, mode, req.reasoning, history_msgs,
-            [image.data_url for image in req.images],
+            [image.data_url for image in req.images], req.session_id,
+            [image.resource_id for image in req.images],
         ):
             yield _sse(event)
 
@@ -392,6 +395,17 @@ class SessionTitleRequest(BaseModel):
     prompt: str
 
 
+class ResourceCreateRequest(BaseModel):
+    data_url: str | None = None
+    source_url: str | None = None
+    name: str = ""
+
+
+class ResourceUpdateRequest(BaseModel):
+    name: str | None = None
+    selected: bool | None = None
+
+
 def _validate_session_title(title: str, session_id: str | None = None) -> str:
     title = title.strip()
     if not title:
@@ -463,6 +477,52 @@ def generate_session_title(session_id: str, req: SessionTitleRequest):
 def delete_session(session_id: str) -> dict[str, Any]:
     deleted = storage.delete_session(session_id)
     return {"deleted": deleted}
+
+
+@app.get("/api/sessions/{session_id}/resources")
+def list_session_resources(session_id: str):
+    resources = storage.list_resources(session_id)
+    if resources is None:
+        return JSONResponse(status_code=404, content={"error": "session not found"})
+    return {"resources": resources}
+
+
+@app.post("/api/sessions/{session_id}/resources")
+def create_session_resource(session_id: str, req: ResourceCreateRequest):
+    try:
+        if req.data_url:
+            resource = storage.add_data_resource(session_id, req.data_url, req.name)
+        elif req.source_url:
+            resource = storage.download_resource(session_id, req.source_url, req.name)
+        else:
+            raise ValueError("data_url or source_url is required")
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    return resource
+
+
+@app.get("/api/sessions/{session_id}/resources/{resource_id}/content")
+def get_session_resource(session_id: str, resource_id: str):
+    item = storage.get_resource_path(session_id, resource_id)
+    if item is None:
+        return JSONResponse(status_code=404, content={"error": "resource not found"})
+    path, resource = item
+    if not resource.get("selected"):
+        return JSONResponse(status_code=404, content={"error": "resource is not selected"})
+    return FileResponse(path, media_type=resource["content_type"])
+
+
+@app.put("/api/sessions/{session_id}/resources/{resource_id}")
+def update_session_resource(session_id: str, resource_id: str, req: ResourceUpdateRequest):
+    resource = storage.update_resource(session_id, resource_id, **req.model_dump(exclude_none=True))
+    if resource is None:
+        return JSONResponse(status_code=404, content={"error": "resource not found"})
+    return resource
+
+
+@app.delete("/api/sessions/{session_id}/resources/{resource_id}")
+def delete_session_resource(session_id: str, resource_id: str):
+    return {"deleted": storage.delete_resource(session_id, resource_id)}
 
 
 @app.post("/api/preview")
