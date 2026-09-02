@@ -1,0 +1,1492 @@
+{
+  "version": "v0.9",
+  "updateComponents": {
+    "surfaceId": "weather_city_tabs",
+    "components": [
+      {
+        "id": "root",
+        "component": "Card",
+        "child": "weather_tabs",
+        "styles": {
+          "border-radius": "24px",
+          "padding": "20px 20px 20px 20px",
+          "filter": "drop-shadow(0px 8px 20px rgba(15, 47, 82, 0.20))"
+        }
+      },
+      {
+        "id": "weather_tabs",
+        "component": "Tabs",
+        "tabs": [
+          {
+            "title": {
+              "path": "/cities/beijing/name"
+            },
+            "child": "beijing_panel"
+          },
+          {
+            "title": {
+              "path": "/cities/shanghai/name"
+            },
+            "child": "shanghai_panel"
+          },
+          {
+            "title": {
+              "path": "/cities/shenzhen/name"
+            },
+            "child": "shenzhen_panel"
+          }
+        ],
+        "selectedIndex": 0
+      },
+      {
+        "id": "beijing_panel",
+        "component": "Column",
+        "children": [
+          "beijing_header",
+          "beijing_current",
+          "beijing_metrics",
+          "beijing_forecast"
+        ]
+      },
+      {
+        "id": "beijing_header",
+        "component": "Row",
+        "children": [
+          "beijing_location",
+          "beijing_updated"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "beijing_location",
+        "component": "Row",
+        "children": [
+          "beijing_location_icon",
+          "beijing_city_name"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "beijing_location_icon",
+        "component": "Icon",
+        "name": "locationOn",
+        "styles": {
+          "width": "28px",
+          "height": "28px",
+          "margin": "0px 8px 0px 0px"
+        }
+      },
+      {
+        "id": "beijing_city_name",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/name"
+        },
+        "variant": "h3",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "32px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "beijing_updated",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/updatedAt"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "beijing_current",
+        "component": "Row",
+        "children": [
+          "beijing_temperature_group",
+          "beijing_condition_group"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 18px 0px"
+        }
+      },
+      {
+        "id": "beijing_temperature_group",
+        "component": "Column",
+        "children": [
+          "beijing_temperature",
+          "beijing_feels_like"
+        ]
+      },
+      {
+        "id": "beijing_temperature",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/temp"
+        },
+        "variant": "h1",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "40px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "beijing_feels_like",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/feelsLike"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "28px"
+        }
+      },
+      {
+        "id": "beijing_condition_group",
+        "component": "Column",
+        "children": [
+          "beijing_condition_icon",
+          "beijing_condition"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "beijing_condition_icon",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/icon"
+        },
+        "variant": "h2",
+        "styles": {
+          "font-size": "36px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/condition"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_metrics",
+        "component": "Row",
+        "children": [
+          "beijing_humidity",
+          "beijing_wind",
+          "beijing_visibility"
+        ],
+        "align": "stretch",
+        "justify": "spaceBetween"
+      },
+      {
+        "id": "beijing_humidity",
+        "component": "Column",
+        "children": [
+          "beijing_humidity_value",
+          "beijing_humidity_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 6px 0px 0px"
+        }
+      },
+      {
+        "id": "beijing_humidity_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/humidity"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_humidity_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/humidity"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_wind",
+        "component": "Column",
+        "children": [
+          "beijing_wind_value",
+          "beijing_wind_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 3px 0px 3px"
+        }
+      },
+      {
+        "id": "beijing_wind_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/wind"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_wind_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/wind"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_visibility",
+        "component": "Column",
+        "children": [
+          "beijing_visibility_value",
+          "beijing_visibility_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 0px 0px 6px"
+        }
+      },
+      {
+        "id": "beijing_visibility_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/current/visibility"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_visibility_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/visibility"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "beijing_forecast",
+        "component": "Column",
+        "children": [
+          "beijing_forecast_title",
+          "beijing_forecast_today",
+          "beijing_forecast_tomorrow",
+          "beijing_forecast_day_after"
+        ],
+        "styles": {
+          "margin": "20px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "beijing_forecast_title",
+        "component": "Text",
+        "text": {
+          "path": "/labels/forecastTitle"
+        },
+        "variant": "h4",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "margin": "0px 0px 8px 0px"
+        }
+      },
+      {
+        "id": "beijing_forecast_today",
+        "component": "Row",
+        "children": [
+          "beijing_forecast_today_day",
+          "beijing_forecast_today_condition",
+          "beijing_forecast_today_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "beijing_forecast_today_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/0/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "beijing_forecast_today_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/0/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "beijing_forecast_today_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/0/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "beijing_forecast_tomorrow",
+        "component": "Row",
+        "children": [
+          "beijing_forecast_tomorrow_day",
+          "beijing_forecast_tomorrow_condition",
+          "beijing_forecast_tomorrow_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "beijing_forecast_tomorrow_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/1/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "beijing_forecast_tomorrow_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/1/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "beijing_forecast_tomorrow_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/1/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "beijing_forecast_day_after",
+        "component": "Row",
+        "children": [
+          "beijing_forecast_day_after_day",
+          "beijing_forecast_day_after_condition",
+          "beijing_forecast_day_after_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px"
+        }
+      },
+      {
+        "id": "beijing_forecast_day_after_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/2/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "beijing_forecast_day_after_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/2/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "beijing_forecast_day_after_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/beijing/forecast/2/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shanghai_panel",
+        "component": "Column",
+        "children": [
+          "shanghai_header",
+          "shanghai_current",
+          "shanghai_metrics",
+          "shanghai_forecast"
+        ]
+      },
+      {
+        "id": "shanghai_header",
+        "component": "Row",
+        "children": [
+          "shanghai_location",
+          "shanghai_updated"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "shanghai_location",
+        "component": "Row",
+        "children": [
+          "shanghai_location_icon",
+          "shanghai_city_name"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "shanghai_location_icon",
+        "component": "Icon",
+        "name": "locationOn",
+        "styles": {
+          "width": "28px",
+          "height": "28px",
+          "margin": "0px 8px 0px 0px"
+        }
+      },
+      {
+        "id": "shanghai_city_name",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/name"
+        },
+        "variant": "h3",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "32px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shanghai_updated",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/updatedAt"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shanghai_current",
+        "component": "Row",
+        "children": [
+          "shanghai_temperature_group",
+          "shanghai_condition_group"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 18px 0px"
+        }
+      },
+      {
+        "id": "shanghai_temperature_group",
+        "component": "Column",
+        "children": [
+          "shanghai_temperature",
+          "shanghai_feels_like"
+        ]
+      },
+      {
+        "id": "shanghai_temperature",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/temp"
+        },
+        "variant": "h1",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "40px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shanghai_feels_like",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/feelsLike"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "28px"
+        }
+      },
+      {
+        "id": "shanghai_condition_group",
+        "component": "Column",
+        "children": [
+          "shanghai_condition_icon",
+          "shanghai_condition"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "shanghai_condition_icon",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/icon"
+        },
+        "variant": "h2",
+        "styles": {
+          "font-size": "36px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/condition"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_metrics",
+        "component": "Row",
+        "children": [
+          "shanghai_humidity",
+          "shanghai_wind",
+          "shanghai_visibility"
+        ],
+        "align": "stretch",
+        "justify": "spaceBetween"
+      },
+      {
+        "id": "shanghai_humidity",
+        "component": "Column",
+        "children": [
+          "shanghai_humidity_value",
+          "shanghai_humidity_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 6px 0px 0px"
+        }
+      },
+      {
+        "id": "shanghai_humidity_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/humidity"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_humidity_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/humidity"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_wind",
+        "component": "Column",
+        "children": [
+          "shanghai_wind_value",
+          "shanghai_wind_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 3px 0px 3px"
+        }
+      },
+      {
+        "id": "shanghai_wind_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/wind"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_wind_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/wind"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_visibility",
+        "component": "Column",
+        "children": [
+          "shanghai_visibility_value",
+          "shanghai_visibility_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 0px 0px 6px"
+        }
+      },
+      {
+        "id": "shanghai_visibility_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/current/visibility"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_visibility_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/visibility"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shanghai_forecast",
+        "component": "Column",
+        "children": [
+          "shanghai_forecast_title",
+          "shanghai_forecast_today",
+          "shanghai_forecast_tomorrow",
+          "shanghai_forecast_day_after"
+        ],
+        "styles": {
+          "margin": "20px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_title",
+        "component": "Text",
+        "text": {
+          "path": "/labels/forecastTitle"
+        },
+        "variant": "h4",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "margin": "0px 0px 8px 0px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_today",
+        "component": "Row",
+        "children": [
+          "shanghai_forecast_today_day",
+          "shanghai_forecast_today_condition",
+          "shanghai_forecast_today_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_today_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/0/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shanghai_forecast_today_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/0/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_today_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/0/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shanghai_forecast_tomorrow",
+        "component": "Row",
+        "children": [
+          "shanghai_forecast_tomorrow_day",
+          "shanghai_forecast_tomorrow_condition",
+          "shanghai_forecast_tomorrow_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_tomorrow_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/1/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shanghai_forecast_tomorrow_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/1/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_tomorrow_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/1/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shanghai_forecast_day_after",
+        "component": "Row",
+        "children": [
+          "shanghai_forecast_day_after_day",
+          "shanghai_forecast_day_after_condition",
+          "shanghai_forecast_day_after_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_day_after_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/2/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shanghai_forecast_day_after_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/2/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shanghai_forecast_day_after_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shanghai/forecast/2/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shenzhen_panel",
+        "component": "Column",
+        "children": [
+          "shenzhen_header",
+          "shenzhen_current",
+          "shenzhen_metrics",
+          "shenzhen_forecast"
+        ]
+      },
+      {
+        "id": "shenzhen_header",
+        "component": "Row",
+        "children": [
+          "shenzhen_location",
+          "shenzhen_updated"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_location",
+        "component": "Row",
+        "children": [
+          "shenzhen_location_icon",
+          "shenzhen_city_name"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "shenzhen_location_icon",
+        "component": "Icon",
+        "name": "locationOn",
+        "styles": {
+          "width": "28px",
+          "height": "28px",
+          "margin": "0px 8px 0px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_city_name",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/name"
+        },
+        "variant": "h3",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "32px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shenzhen_updated",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/updatedAt"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shenzhen_current",
+        "component": "Row",
+        "children": [
+          "shenzhen_temperature_group",
+          "shenzhen_condition_group"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "margin": "18px 0px 18px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_temperature_group",
+        "component": "Column",
+        "children": [
+          "shenzhen_temperature",
+          "shenzhen_feels_like"
+        ]
+      },
+      {
+        "id": "shenzhen_temperature",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/temp"
+        },
+        "variant": "h1",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "40px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shenzhen_feels_like",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/feelsLike"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "28px"
+        }
+      },
+      {
+        "id": "shenzhen_condition_group",
+        "component": "Column",
+        "children": [
+          "shenzhen_condition_icon",
+          "shenzhen_condition"
+        ],
+        "align": "center"
+      },
+      {
+        "id": "shenzhen_condition_icon",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/icon"
+        },
+        "variant": "h2",
+        "styles": {
+          "font-size": "36px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/condition"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_metrics",
+        "component": "Row",
+        "children": [
+          "shenzhen_humidity",
+          "shenzhen_wind",
+          "shenzhen_visibility"
+        ],
+        "align": "stretch",
+        "justify": "spaceBetween"
+      },
+      {
+        "id": "shenzhen_humidity",
+        "component": "Column",
+        "children": [
+          "shenzhen_humidity_value",
+          "shenzhen_humidity_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 6px 0px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_humidity_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/humidity"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_humidity_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/humidity"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_wind",
+        "component": "Column",
+        "children": [
+          "shenzhen_wind_value",
+          "shenzhen_wind_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 3px 0px 3px"
+        }
+      },
+      {
+        "id": "shenzhen_wind_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/wind"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_wind_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/wind"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_visibility",
+        "component": "Column",
+        "children": [
+          "shenzhen_visibility_value",
+          "shenzhen_visibility_label"
+        ],
+        "align": "center",
+        "styles": {
+          "background-color": "#2A5E8C",
+          "border-radius": "16px",
+          "padding": "12px 14px 12px 14px",
+          "flex-grow": 1,
+          "margin": "0px 0px 0px 6px"
+        }
+      },
+      {
+        "id": "shenzhen_visibility_value",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/current/visibility"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_visibility_label",
+        "component": "Text",
+        "text": {
+          "path": "/labels/visibility"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#C9E1F4",
+          "font-size": "24px",
+          "text-align": "center"
+        }
+      },
+      {
+        "id": "shenzhen_forecast",
+        "component": "Column",
+        "children": [
+          "shenzhen_forecast_title",
+          "shenzhen_forecast_today",
+          "shenzhen_forecast_tomorrow",
+          "shenzhen_forecast_day_after"
+        ],
+        "styles": {
+          "margin": "20px 0px 0px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_title",
+        "component": "Text",
+        "text": {
+          "path": "/labels/forecastTitle"
+        },
+        "variant": "h4",
+        "styles": {
+          "color": "#D9E2EC",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "margin": "0px 0px 8px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_today",
+        "component": "Row",
+        "children": [
+          "shenzhen_forecast_today_day",
+          "shenzhen_forecast_today_condition",
+          "shenzhen_forecast_today_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_today_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/0/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_today_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/0/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_today_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/0/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_tomorrow",
+        "component": "Row",
+        "children": [
+          "shenzhen_forecast_tomorrow_day",
+          "shenzhen_forecast_tomorrow_condition",
+          "shenzhen_forecast_tomorrow_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px",
+          "margin": "0px 0px 6px 0px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_tomorrow_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/1/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_tomorrow_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/1/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_tomorrow_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/1/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_day_after",
+        "component": "Row",
+        "children": [
+          "shenzhen_forecast_day_after_day",
+          "shenzhen_forecast_day_after_condition",
+          "shenzhen_forecast_day_after_temp"
+        ],
+        "align": "center",
+        "justify": "spaceBetween",
+        "styles": {
+          "background-color": "#22537F",
+          "border-radius": "14px",
+          "padding": "10px 14px 10px 14px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_day_after_day",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/2/day"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_day_after_condition",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/2/condition"
+        },
+        "variant": "caption",
+        "styles": {
+          "color": "#D5EAF9",
+          "font-size": "24px"
+        }
+      },
+      {
+        "id": "shenzhen_forecast_day_after_temp",
+        "component": "Text",
+        "text": {
+          "path": "/cities/shenzhen/forecast/2/tempRange"
+        },
+        "variant": "body",
+        "styles": {
+          "color": "#FFFFFF",
+          "font-size": "28px",
+          "font-weight": "bold",
+          "text-align": "right"
+        }
+      }
+    ]
+  }
+}

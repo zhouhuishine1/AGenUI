@@ -1,0 +1,41 @@
+{
+  "version": "v0.9",
+  "updateComponents": {
+    "surfaceId": "repayment_card",
+    "components": [
+      {"id":"root","component":"Card","child":"main_column"},
+      {"id":"main_column","component":"Column","children":["bill_summary","bill_details","prompt_text","options_column"],"styles":{"background-color":"#FAF7F5","border-radius":"24px","padding":"20px 20px 20px 20px"}},
+      {"id":"bill_summary","component":"Text","text":{"path":"/repayment/billSummary"},"variant":"h3","styles":{"font-size":"32px","font-weight":"bold","color":"#1D2129","line-height":1.4}},
+      {"id":"bill_details","component":"Text","text":{"path":"/repayment/billDetails"},"variant":"body","styles":{"font-size":"28px","color":"#4E5969","margin":"6px 0px 16px 0px","line-height":1.4}},
+      {"id":"prompt_text","component":"Text","text":{"path":"/repayment/prompt"},"variant":"h4","styles":{"font-size":"32px","font-weight":"bold","color":"#1D2129","margin":"0px 0px 16px 0px"}},
+      {"id":"options_column","component":"Column","children":["opt1_card","opt2_card","opt3_card"]},
+      {"id":"opt1_card","component":"Card","child":"opt1_row","styles":{"margin":"0px 0px 12px 0px"}},
+      {"id":"opt1_row","component":"Row","justify":"spaceBetween","align":"center","children":["opt1_left_row","opt1_btn"],"styles":{"background-color":"#FFFFFF","border-radius":"16px","padding":"16px 16px 16px 16px","width":"100%","justify-content":"space-between"}},
+      {"id":"opt1_left_row","component":"Row","align":"center","children":["opt1_icon","opt1_info"],"styles":{"flex-grow":1}},
+      {"id":"opt1_icon","component":"Icon","name":"payment","styles":{"margin":"0px 12px 0px 0px"}},
+      {"id":"opt1_info","component":"Column","children":["opt1_title","opt1_sub"]},
+      {"id":"opt1_title","component":"Text","text":{"path":"/repayment/opt1/title"},"variant":"h4","styles":{"font-size":"32px","font-weight":"bold","color":"#1D2129"}},
+      {"id":"opt1_sub","component":"Text","text":{"path":"/repayment/opt1/sub"},"variant":"caption","styles":{"font-size":"26px","color":"#86909C","margin":"4px 0px 0px 0px"}},
+      {"id":"opt1_btn","component":"Button","child":"opt1_btn_text","variant":"primary","action":{"functionCall":{"call":"selectRepayOption","args":{"type":"full"}}},"styles":{"background-color":"#FFF0E6","border-color":"#FF6B00","border-style":"solid","border-width":"1px","border-radius":"20px","padding":"8px 20px 8px 20px","flex-shrink":0}},
+      {"id":"opt1_btn_text","component":"Text","text":{"path":"/repayment/opt1/btnText"},"styles":{"color":"#FF6B00","font-weight":"bold","font-size":"28px"}},
+      {"id":"opt2_card","component":"Card","child":"opt2_row","styles":{"margin":"0px 0px 12px 0px"}},
+      {"id":"opt2_row","component":"Row","justify":"spaceBetween","align":"center","children":["opt2_left_row","opt2_btn"],"styles":{"background-color":"#FFFFFF","border-radius":"16px","padding":"16px 16px 16px 16px","width":"100%","justify-content":"space-between"}},
+      {"id":"opt2_left_row","component":"Row","align":"center","children":["opt2_icon","opt2_info"],"styles":{"flex-grow":1}},
+      {"id":"opt2_icon","component":"Icon","name":"event","styles":{"margin":"0px 12px 0px 0px"}},
+      {"id":"opt2_info","component":"Column","children":["opt2_title","opt2_sub"]},
+      {"id":"opt2_title","component":"Text","text":{"path":"/repayment/opt2/title"},"variant":"h4","styles":{"font-size":"32px","font-weight":"bold","color":"#1D2129"}},
+      {"id":"opt2_sub","component":"Text","text":{"path":"/repayment/opt2/sub"},"variant":"caption","styles":{"font-size":"26px","color":"#86909C","margin":"4px 0px 0px 0px"}},
+      {"id":"opt2_btn","component":"Button","child":"opt2_btn_text","variant":"primary","action":{"functionCall":{"call":"selectRepayOption","args":{"type":"minimum"}}},"styles":{"background-color":"#FFF0E6","border-color":"#FF6B00","border-style":"solid","border-width":"1px","border-radius":"20px","padding":"8px 20px 8px 20px","flex-shrink":0}},
+      {"id":"opt2_btn_text","component":"Text","text":{"path":"/repayment/opt2/btnText"},"styles":{"color":"#FF6B00","font-weight":"bold","font-size":"28px"}},
+      {"id":"opt3_card","component":"Card","child":"opt3_row"},
+      {"id":"opt3_row","component":"Row","justify":"spaceBetween","align":"center","children":["opt3_left_row","opt3_btn"],"styles":{"background-color":"#FFFFFF","border-radius":"16px","padding":"16px 16px 16px 16px","width":"100%","justify-content":"space-between"}},
+      {"id":"opt3_left_row","component":"Row","align":"center","children":["opt3_icon","opt3_info"],"styles":{"flex-grow":1}},
+      {"id":"opt3_icon","component":"Icon","name":"edit","styles":{"margin":"0px 12px 0px 0px"}},
+      {"id":"opt3_info","component":"Column","children":["opt3_title","opt3_sub"]},
+      {"id":"opt3_title","component":"Text","text":{"path":"/repayment/opt3/title"},"variant":"h4","styles":{"font-size":"32px","font-weight":"bold","color":"#1D2129"}},
+      {"id":"opt3_sub","component":"Text","text":{"path":"/repayment/opt3/sub"},"variant":"caption","styles":{"font-size":"26px","color":"#86909C","margin":"4px 0px 0px 0px"}},
+      {"id":"opt3_btn","component":"Button","child":"opt3_btn_text","variant":"primary","action":{"functionCall":{"call":"selectRepayOption","args":{"type":"custom"}}},"styles":{"background-color":"#FFF0E6","border-color":"#FF6B00","border-style":"solid","border-width":"1px","border-radius":"20px","padding":"8px 20px 8px 20px","flex-shrink":0}},
+      {"id":"opt3_btn_text","component":"Text","text":{"path":"/repayment/opt3/btnText"},"styles":{"color":"#FF6B00","font-weight":"bold","font-size":"28px"}}
+    ]
+  }
+}

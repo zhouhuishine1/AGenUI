@@ -1,0 +1,23 @@
+{
+  "name": "agenui-rn-chat-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {"android": "react-native run-android", "start": "react-native start", "test": "jest"},
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "react": "19.0.0",
+    "react-native": "0.79.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@react-native/babel-preset": "0.79.2",
+    "@react-native/metro-config": "0.79.2",
+    "@react-native/typescript-config": "0.79.2",
+    "@react-native-community/cli": "^18.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-native": "^0.73.0",
+    "typescript": "^5.7.3"
+  }
+}

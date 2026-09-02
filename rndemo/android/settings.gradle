@@ -1,0 +1,12 @@
+pluginManagement {
+  includeBuild("../node_modules/@react-native/gradle-plugin")
+  repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+plugins { id("com.facebook.react.settings") }
+extensions.configure(com.facebook.react.ReactSettingsExtension) { extension -> extension.autolinkLibrariesFromCommand() }
+dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+rootProject.name = "AgenUIChatDemo"
+include(":app", ":agenui-sdk", ":processor")
+project(":agenui-sdk").projectDir = file("../../platforms/android")
+project(":processor").projectDir = file("../../platforms/android/processor")
+includeBuild("../node_modules/@react-native/gradle-plugin")

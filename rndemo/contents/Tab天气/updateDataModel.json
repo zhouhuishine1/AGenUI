@@ -1,0 +1,107 @@
+{
+  "version": "v0.9",
+  "updateDataModel": {
+    "surfaceId": "weather_city_tabs",
+    "path": "/",
+    "value": {
+      "labels": {
+        "humidity": "湿度",
+        "wind": "风力",
+        "visibility": "能见度",
+        "forecastTitle": "未来三天"
+      },
+      "cities": {
+        "beijing": {
+          "name": "北京",
+          "updatedAt": "今天 14:08 实时",
+          "current": {
+            "temp": "18°",
+            "feelsLike": "体感 16°",
+            "icon": "☁️",
+            "condition": "多云",
+            "humidity": "56%",
+            "wind": "东北风 3级",
+            "visibility": "12 km"
+          },
+          "forecast": [
+            {
+              "day": "今天",
+              "condition": "多云",
+              "tempRange": "11° / 20°"
+            },
+            {
+              "day": "明天",
+              "condition": "晴",
+              "tempRange": "9° / 22°"
+            },
+            {
+              "day": "后天",
+              "condition": "小雨",
+              "tempRange": "12° / 18°"
+            }
+          ]
+        },
+        "shanghai": {
+          "name": "上海",
+          "updatedAt": "今天 14:08 实时",
+          "current": {
+            "temp": "22°",
+            "feelsLike": "体感 23°",
+            "icon": "🌦️",
+            "condition": "阵雨",
+            "humidity": "78%",
+            "wind": "东南风 4级",
+            "visibility": "8 km"
+          },
+          "forecast": [
+            {
+              "day": "今天",
+              "condition": "阵雨",
+              "tempRange": "18° / 24°"
+            },
+            {
+              "day": "明天",
+              "condition": "阴",
+              "tempRange": "17° / 22°"
+            },
+            {
+              "day": "后天",
+              "condition": "小雨",
+              "tempRange": "16° / 21°"
+            }
+          ]
+        },
+        "shenzhen": {
+          "name": "深圳",
+          "updatedAt": "今天 14:08 实时",
+          "current": {
+            "temp": "27°",
+            "feelsLike": "体感 29°",
+            "icon": "🌤️",
+            "condition": "晴间多云",
+            "humidity": "69%",
+            "wind": "东风 2级",
+            "visibility": "15 km"
+          },
+          "forecast": [
+            {
+              "day": "今天",
+              "condition": "晴间多云",
+              "tempRange": "23° / 29°"
+            },
+            {
+              "day": "明天",
+              "condition": "晴",
+              "tempRange": "24° / 30°"
+            },
+            {
+              "day": "后天",
+              "condition": "雷阵雨",
+              "tempRange": "24° / 28°"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "version":"v0.9",
+  "updateDataModel":{"surfaceId":"repayment_card","path":"/repayment","value":{"billSummary":"您本期信用卡账单【尚未还清】","billDetails":"剩余待还金额 ¥ 6270.31 ，还款日 8-16","prompt":"我可以帮您","opt1":{"title":"还清账单","sub":"还 ¥ 6270.31","btnText":"选它"},"opt2":{"title":"先还最低","sub":"还 ¥ 313.52 ，不影响征信","btnText":"选它"},"opt3":{"title":"自定义还款金额","sub":"请告诉我具体的还款金额","btnText":"选它"}}}
+}
