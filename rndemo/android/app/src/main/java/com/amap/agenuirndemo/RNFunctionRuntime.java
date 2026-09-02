@@ -28,10 +28,10 @@ public final class RNFunctionRuntime {
     final com.facebook.react.ReactInstanceManager instanceManager = ((MainApplication) activity.getApplication()).getReactNativeHost().getReactInstanceManager();
     Handler main = new Handler(Looper.getMainLooper());
     main.post(() -> {
-      root.setVisibility(android.view.View.GONE);
+      root.setVisibility(android.view.View.INVISIBLE);
       activity.addContentView(root, new android.view.ViewGroup.LayoutParams(1, 1));
       root.startReactApplication(instanceManager, "AgenUIFunctionRuntime", null);
-      main.postDelayed(() -> emit(requestId, surfaceId, call, args), 100);
+      main.postDelayed(() -> emitWhenReady(requestId, surfaceId, call, args, main, 0), 100);
     });
     if (!latch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
       FunctionCallRequests.remove(requestId);
@@ -44,9 +44,9 @@ public final class RNFunctionRuntime {
     return value == null ? "{}" : value;
   }
 
-  private static void emit(String requestId, String surfaceId, String call, String args) {
+  private static void emitWhenReady(String requestId, String surfaceId, String call, String args, Handler main, int attempt) {
     ReactContext context = ((MainApplication) AgenUIChatBridge.getHostActivity().getApplication()).getReactNativeHost().getReactInstanceManager().getCurrentReactContext();
-    if (context == null) return;
+    if (context == null) { if (attempt < 50 && FunctionCallRequests.latches.containsKey(requestId)) main.postDelayed(() -> emitWhenReady(requestId, surfaceId, call, args, main, attempt + 1), 100); return; }
     WritableMap payload = Arguments.createMap();
     payload.putString("requestId", requestId); payload.putString("surfaceId", surfaceId); payload.putString("call", call); payload.putString("args", args);
     context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RunFunctionCall", payload);
