@@ -4,7 +4,7 @@ pluginManagement {
 }
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension) { extension -> extension.autolinkLibrariesFromCommand() }
-dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+dependencyResolutionManagement { repositories { google(); mavenCentral(); maven { url = uri("../../flutter_pet/build/host/outputs/repo") }; maven { url = uri("https://storage.googleapis.com/download.flutter.io") } } }
 rootProject.name = "AgenUIChatDemo"
 include(":app", ":agenui-sdk", ":processor")
 project(":agenui-sdk").projectDir = file("../../platforms/android")

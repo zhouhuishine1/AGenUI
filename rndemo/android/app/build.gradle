@@ -2,6 +2,11 @@ plugins { id("com.android.application"); id("com.facebook.react") }
 
 react { autolinkLibrariesWithApp() }
 
+repositories {
+    maven { url = uri("../../flutter_pet/build/host/outputs/repo") }
+    maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+}
+
 android {
     namespace "com.amap.agenuirndemo"
     compileSdk 35
@@ -11,6 +16,8 @@ android {
 }
 
 dependencies {
+    debugImplementation("com.amap.flutter_pet:flutter_debug:1.0")
+    releaseImplementation("com.amap.flutter_pet:flutter_release:1.0")
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:hermes-android")
     implementation(project(":agenui-sdk"))

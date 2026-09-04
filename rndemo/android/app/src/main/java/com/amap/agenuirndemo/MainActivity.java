@@ -7,6 +7,10 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.*;
+import io.flutter.embedding.android.FlutterView;
+import io.flutter.embedding.android.TransparencyMode;
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.embedding.engine.dart.DartExecutor;
 import com.fluid.afm.markdown.widget.PrinterMarkDownTextView;
 import com.fluid.afm.styles.MarkdownStyles;
 import java.io.InputStream;
@@ -18,6 +22,8 @@ public final class MainActivity extends Activity {
   private LinearLayout messages;
   private LinearLayout faq;
   private JSONArray questions;
+  private FlutterEngine petEngine;
+  private FlutterView petView;
   @Override protected void onCreate(Bundle state) {
     super.onCreate(state); AgenUIChatBridge.setHostActivity(this); questions = readArray("index.json");
     messages = new LinearLayout(this); faq = new LinearLayout(this);
@@ -27,8 +33,18 @@ public final class MainActivity extends Activity {
     ScrollView chat = new ScrollView(this); messages.setOrientation(LinearLayout.VERTICAL); messages.setPadding(dp(12), dp(12), dp(12), dp(12)); chat.addView(messages); root.addView(chat, new LinearLayout.LayoutParams(-1, 0, 1));
     faq.setOrientation(LinearLayout.HORIZONTAL); faq.setPadding(dp(8), dp(4), dp(8), dp(4)); ScrollView faqScroll = new ScrollView(this); faqScroll.setHorizontalScrollBarEnabled(false); faqScroll.addView(faq); root.addView(faqScroll, new LinearLayout.LayoutParams(-1, dp(52)));
     LinearLayout composer = new LinearLayout(this); composer.setPadding(dp(12), dp(8), dp(12), dp(8)); EditText input = new EditText(this); input.setHint("请输入您要咨询的问题"); Button send = new Button(this); send.setText("发送"); send.setOnClickListener(v -> { submit(input.getText().toString(), chat); input.setText(""); }); composer.addView(input, new LinearLayout.LayoutParams(0, -2, 1)); composer.addView(send, new LinearLayout.LayoutParams(-2, -2)); root.addView(composer);
-    setContentView(root); root.requestApplyInsets(); loadFaq(chat);
+    FrameLayout container = new FrameLayout(this);
+    container.addView(root, new FrameLayout.LayoutParams(-1, -1));
+    petEngine = new FlutterEngine(this);
+    petEngine.getDartExecutor().executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault());
+    petView = new FlutterView(this, TransparencyMode.transparent);
+    petView.setClickable(true);
+    petView.setBackgroundColor(Color.TRANSPARENT);
+    petView.attachToFlutterEngine(petEngine);
+    container.addView(petView, new FrameLayout.LayoutParams(-1, -1));
+    setContentView(container); root.requestApplyInsets(); loadFaq(chat);
   }
+  @Override protected void onDestroy() { if (petView != null) petView.detachFromFlutterEngine(); if (petEngine != null) petEngine.destroy(); super.onDestroy(); }
   private View header() { TextView value = new TextView(this); value.setText("◷     权益       小安       账户       更多 ›"); value.setTextColor(Color.WHITE); value.setTextSize(16); value.setGravity(Gravity.CENTER_VERTICAL); value.setPadding(dp(20), 0, 0, 0); value.setBackgroundColor(Color.rgb(43,36,33)); return value; }
   private View todo() { TextView value = new TextView(this); value.setText("待办     今日待办 3 项                         展开⌄"); value.setTextColor(Color.rgb(84,42,25)); value.setTextSize(15); value.setPadding(dp(14), dp(14), dp(14), dp(14)); value.setBackgroundColor(Color.rgb(244,201,163)); return value; }
   private void loadFaq(ScrollView chat) { for (int i = 0; i < questions.length(); i++) { String question = questions.optString(i); Button button = new Button(this); button.setText(question); button.setOnClickListener(v -> submit(question, chat)); faq.addView(button); } }

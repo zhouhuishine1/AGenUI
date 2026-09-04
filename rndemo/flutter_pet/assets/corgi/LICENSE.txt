@@ -1,0 +1,12 @@
+Corgi Companion spritesheet
+
+Author: cxian0928-afk
+Source: https://github.com/cxian0928-afk/corgi-codex-pet
+Distribution source: https://github.com/legeling/awesome-codex-pet
+
+The source pet project is marked MIT. The distribution repository states that
+pet assets are CC BY-NC 4.0 unless a pet folder says otherwise. Keep this
+attribution and do not use the asset for commercial purposes without separate
+permission from the asset owner.
+
+License: https://creativecommons.org/licenses/by-nc/4.0/
